@@ -9,11 +9,11 @@ LDFLAGS    =
 all: $(EXECUTABLE)
 
 $(EXECUTABLE): main.o
-  $(CC) $(LDFLAGS) main.o -o $(EXECUTABLE)
+	$(CC) $(LDFLAGS) main.o -o $(EXECUTABLE)
 
 main.o:
-  $(CC) $(CCFLAGS) $(CCWARNS) main.c
+	$(CC) $(CCFLAGS) $(CCWARNS) main.c
 
 clean:
-  rm -f *.o
-  rm -f $(EXECUTABLE)
+	rm -f *.o
+	rm -f $(EXECUTABLE)
