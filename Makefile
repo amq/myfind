@@ -1,19 +1,19 @@
-CC         = clang
-EXECUTABLE = myfind
-CCFLAGS    = -c -g -std=gnu11 -fno-common -O3
-CCWARNS    = -Wall -Wextra -Wstrict-prototypes -pedantic
-LDFLAGS    =
+TARGET   = myfind
+CC       = clang
+CFLAGS   = -c -g -std=gnu11 -fno-common -O3
+CWARNS   = -Wall -Wextra -Wstrict-prototypes -pedantic
+LDFLAGS  =
 
 .PHONY: clean
 
-all: $(EXECUTABLE)
+all: $(TARGET)
 
-$(EXECUTABLE): main.o
-	$(CC) $(LDFLAGS) main.o -o $(EXECUTABLE)
+$(TARGET): main.o
+	$(CC) $(LDFLAGS) main.o -o $(TARGET)
 
 main.o:
-	$(CC) $(CCFLAGS) $(CCWARNS) main.c
+	$(CC) $(CFLAGS) $(CWARNS) main.c
 
 clean:
 	rm -f *.o
-	rm -f $(EXECUTABLE)
+	rm -f $(TARGET)
