@@ -4,7 +4,7 @@ CFLAGS   = -c -g -std=gnu11 -fno-common -O3
 CWARNS   = -Wall -Wextra -Wstrict-prototypes -pedantic
 LDFLAGS  =
 
-.PHONY: clean
+.PHONY: clean format
 
 all: $(TARGET)
 
@@ -17,3 +17,6 @@ main.o:
 clean:
 	rm -f *.o
 	rm -f $(TARGET)
+
+format:
+    clang-format -style=llvm -i *.c *.h
