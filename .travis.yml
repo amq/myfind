@@ -1,6 +1,9 @@
 language: c
 compiler: clang
-script: make
+script:
+ - make
+ - ./myfind
+ - gcov main.c
 before_install:
   - pip install --user codecov
 after_success:
