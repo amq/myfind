@@ -1,6 +1,6 @@
 TARGET   = myfind
 CC       = clang
-CFLAGS   = -c -g -std=gnu11 -fno-common -O0
+CFLAGS   = -c -g -coverage -std=gnu11 -fno-common -O0
 CWARNS   = -Wall -Wextra -Wstrict-prototypes -pedantic
 LDFLAGS  = -coverage
 
