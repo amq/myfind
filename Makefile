@@ -1,8 +1,8 @@
 TARGET   = myfind
 CC       = clang
-CFLAGS   = -c -g -std=gnu11 -fno-common -O3
+CFLAGS   = -c -g -std=gnu11 -fno-common -O0
 CWARNS   = -Wall -Wextra -Wstrict-prototypes -pedantic
-LDFLAGS  =
+LDFLAGS  = -coverage
 
 .PHONY: clean format
 

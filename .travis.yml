@@ -1,3 +1,7 @@
 language: c
 compiler: clang
 script: make
+before_install:
+  - pip install --user codecov
+after_success:
+  - codecov
