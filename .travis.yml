@@ -1,9 +1,14 @@
 language: c
-compiler: clang
+compiler:
+ - clang
+ - gcc
 script:
- - make
+ - mkdir -p build
+ - cd build
+  - cmake ..
+  - make
  - ./myfind
- - gcov main.c
+ - gcov CMakeFiles/myfind.dir/main.c.o
 before_install:
   - pip install --user codecov
 after_success:
