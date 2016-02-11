@@ -1,7 +1,16 @@
 language: c
 compiler:
   - clang
-  - gcc
+  - gcc-5
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+      - george-edison55-precise-backports
+    packages:
+      - gcc-5
+      - cmake
+      - cmake-data
 script:
   - mkdir -p build
   - cd build
