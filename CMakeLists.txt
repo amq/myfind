@@ -1,11 +1,12 @@
 cmake_minimum_required(VERSION 2.8)
+cmake_policy(SET CMP0053 OLD)
 project(myfind)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu11 \
+set(CMAKE_C_FLAGS "@CMAKE_C_FLAGS@ -std=gnu11 \
 -Wall -Wextra -Wstrict-prototypes -pedantic \
 -g -O0 -fprofile-arcs -ftest-coverage")
 
 SET(CMAKE_EXE_LINKER_FLAGS="-fprofile-arcs -ftest-coverage")
 
 set(SOURCE_FILES main.c)
-add_executable(myfind ${SOURCE_FILES})
+add_executable(myfind @SOURCE_FILES@)
