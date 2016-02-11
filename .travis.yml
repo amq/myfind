@@ -1,12 +1,16 @@
 language: c
 compiler:
+  - gcc-5
   - clang
-  - gcc
 addons:
   apt:
     sources:
+      - ubuntu-toolchain-r-test
+      - llvm-toolchain-precise-3.7
       - george-edison55-precise-backports
     packages:
+      - gcc-5
+      - clang-3.7
       - cmake
       - cmake-data
 script:
@@ -16,7 +20,5 @@ script:
   - make
   - ./myfind
   - gcov CMakeFiles/myfind.dir/main.c.o
-before_install:
-  - pip install --user codecov
 after_success:
-  - codecov
+  - bash <(curl -s https://codecov.io/bash)
