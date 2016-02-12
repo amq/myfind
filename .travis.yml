@@ -12,6 +12,7 @@ addons:
       - gcc-5
       - clang-3.7
       - cmake
+      - cmake-data
 script:
   - mkdir -p build
   - cd build
