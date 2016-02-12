@@ -1,14 +1,24 @@
 language: c
 compiler:
-  - gcc
-  - clang
+  - gcc-5
+  - clang-3.7
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test # gcc
+      - llvm-toolchain-precise-3.7 # clang
+      - george-edison55-precise-backports # cmake
+    packages:
+      - gcc-5
+      - clang-3.7
+      - cmake
+      - cmake-data
 script:
   - mkdir -p build
   - cd build
   - cmake ..
   - make
   - ./myfind
-  - if [ "$CC" == "gcc" ]; then gcov-5 CMakeFiles/*/*.o; fi
+  - if [ "$CC" == "gcc-5" ]; then gcov-5 CMakeFiles/*/*.o; fi
 after_success:
-  - if [ "$CC" == "gcc" ]; then bash <(curl -s https://codecov.io/bash); fi
-
+  - if [ "$CC" == "gcc-5" ]; then bash <(curl -s https://codecov.io/bash); fi
