@@ -12,13 +12,12 @@ addons:
       - gcc-5
       - clang-3.7
       - cmake
-      - cmake-data
 script:
   - mkdir -p build
   - cd build
   - cmake ..
   - make
   - ./myfind
-  - gcov-5 */*/*.o # CMakeFiles/myfind.dir/*.o
+  - if [ "$CC" == "gcc" ]; then gcov-5 CMakeFiles/*/*.o; fi
 after_success:
-  - bash <(curl -s https://codecov.io/bash)
+  - if [ "$CC" == "gcc" ]; then bash <(curl -s https://codecov.io/bash); fi
