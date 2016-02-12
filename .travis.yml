@@ -6,7 +6,7 @@ addons:
   apt:
     sources:
       - ubuntu-toolchain-r-test # gcc
-      - llvm-toolchain-precise-3.7 # cmake
+      - llvm-toolchain-precise-3.7 # llvm
       - george-edison55-precise-backports # cmake
     packages:
       - gcc-5
@@ -24,4 +24,4 @@ after_success:
   - if [ "$CC" == "gcc-5" ]; then bash <(curl -s https://codecov.io/bash); fi
 env:
   global:
-    secure: aJXNu83iW6b/xRMpZtHvtBrvO70i6m8ElMDiM663Bu8F/hj300OMtupmLy0c+/N5/W1D0ltGxcMiHizB3oXvqm6EgcOySuhgeS34Jfq+Wl5lL7iobnj0W1sua3YVSQGjz+61EZjlSYl6WDymBVHxAnVzJcGv+HPWiClXH2WUKEwexDMeFPavzNqdIzjutcUVBfIigP3CabLNYQ7rFtJDt7h66glrCgcYr4hhka7FYAnsY5CTV3FjL33NumVIgLKajrOh2xLXXURdKu6SBK2k535U5YUtVuPbhfJqMn/D0147RdH6L55owU4+cxlK42Xw1Qekbp0D8qnaeq3VxO/CDPIAP+M1zMJQ5+c4t97bzYkafp/IE7YaaQznlN3xA9vl1sGnOHVzYQACH/cIhhq5I8YfM41Xd1WX/1AMjiYepZM0iNEiEOu9RtEKoXSlCQ7hxlzmfcWHBWpgZbL8pDmFCAtdqdkj/Wq5QsRVwg8IXS7w6eybv7Vm+l7V5oK1xwxu6o+He0UjDogTF76fbRAZjv3nXhfIf790/gfgJNX7qPGAn/6ygAr5XGT8evyXY+owGHEIxFJRlahXsMv/EeBJtMdscuz19kCEtLbLLJIHlZKtqa1nurkAAYKlun6JyZHSDtba8VQ0Gxw98lun0wUy/38xa1SFynjoznWIi3UPRr4=
+    secure: "YXJlXP+MX9lmXZZZsX8K2JwSxNKfZjCDLwLjICItC7I/KwVohoYPysXeNMAGn+FnupmK+gacC/C0yuizanvXsj2JLmtR0a/Sh6aANgHGuIbYulsFNVe/O5xa1sDEvGbofb75b/uxa0T0jC8ZnohAYYartnrlR7tBo4XTKYvnE/Ro2CDJGDFOpL0ZIBEZpcorC3VR7N2n+mPdddtXS2MPonggJOTy9vaiQhXTVLpFJYmCuM0ES/B8RCR9YVBX9sMhSj/aEJfBHEdAVn4286BYEoY2IrsJELGcaIWXQV6AUCyiDRVk/aCjrAnnG4rLi8Ji2mW3DVa2fYIqfx82cEuN26C3f8sraK6MBZIw2GjXEcUT7uXPW6iHmtwdBmEZ2WDGlnAj0nupeOACEAuiktIFWnFGeNIcTysUGfp9yAK4cfGwlHisEt7btDh+jGMGykqjdh7wDX8FwMxLxJt8LH5a3Ppb5WGOcygib1XodklKlauPLEUeagDtlNv3nnDBpJYxzhtW9u9XLHVUAPMpE4WbLuHXfw5J86id2drvIT683dK8VBP4mdLHWQKDJt4s0wDoI2jSkMIKnyaSu4JufrgTqSlOekBiJ8lpntVdeGj9XeSufEJs+qaivm7shoFUjyrfvfRLbjMQBI26PcrQSDcMXdVJQIqD+jiAqY2tIHYRgDM="
