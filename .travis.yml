@@ -6,7 +6,7 @@ addons:
   apt:
     sources:
       - ubuntu-toolchain-r-test # gcc
-      - llvm-toolchain-precise-3.7 # llvm
+      - llvm-toolchain-precise-3.7 # cmake
       - george-edison55-precise-backports # cmake
     packages:
       - gcc-5
@@ -22,6 +22,3 @@ script:
   - if [ "$CC" == "gcc-5" ]; then gcov-5 CMakeFiles/*/*.o; fi
 after_success:
   - if [ "$CC" == "gcc-5" ]; then bash <(curl -s https://codecov.io/bash); fi
-env:
-  global:
-    secure: "YXJlXP+MX9lmXZZZsX8K2JwSxNKfZjCDLwLjICItC7I/KwVohoYPysXeNMAGn+FnupmK+gacC/C0yuizanvXsj2JLmtR0a/Sh6aANgHGuIbYulsFNVe/O5xa1sDEvGbofb75b/uxa0T0jC8ZnohAYYartnrlR7tBo4XTKYvnE/Ro2CDJGDFOpL0ZIBEZpcorC3VR7N2n+mPdddtXS2MPonggJOTy9vaiQhXTVLpFJYmCuM0ES/B8RCR9YVBX9sMhSj/aEJfBHEdAVn4286BYEoY2IrsJELGcaIWXQV6AUCyiDRVk/aCjrAnnG4rLi8Ji2mW3DVa2fYIqfx82cEuN26C3f8sraK6MBZIw2GjXEcUT7uXPW6iHmtwdBmEZ2WDGlnAj0nupeOACEAuiktIFWnFGeNIcTysUGfp9yAK4cfGwlHisEt7btDh+jGMGykqjdh7wDX8FwMxLxJt8LH5a3Ppb5WGOcygib1XodklKlauPLEUeagDtlNv3nnDBpJYxzhtW9u9XLHVUAPMpE4WbLuHXfw5J86id2drvIT683dK8VBP4mdLHWQKDJt4s0wDoI2jSkMIKnyaSu4JufrgTqSlOekBiJ8lpntVdeGj9XeSufEJs+qaivm7shoFUjyrfvfRLbjMQBI26PcrQSDcMXdVJQIqD+jiAqY2tIHYRgDM="
