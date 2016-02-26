@@ -84,13 +84,13 @@ int do_file(const char *location, char *params[]) {
 
 int print_usage() {
   printf("myfind <file or directory> [ <aktion> ]\n"
-         "-user <name>|<uid>\n"
-         "-name <pattern>\n"
-         "-type [bcdpfls]\n"
-         "-print\n"
-         "-ls\n"
-         "-nouser\n"
-         "-path\n");
+                 "-user <name>|<uid>\n"
+                 "-name <pattern>\n"
+                 "-type [bcdpfls]\n"
+                 "-print\n"
+                 "-ls\n"
+                 "-nouser\n"
+                 "-path\n");
 
   return EXIT_FAILURE;
 }
