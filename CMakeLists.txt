@@ -5,5 +5,5 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu11 -Wall -Wextra -Wstrict-prototypes
 
 SET(CMAKE_EXE_LINKER_FLAGS="-fprofile-arcs -ftest-coverage")
 
-set(SOURCE_FILES main.c lib.h lib.c)
+set(SOURCE_FILES main.c)
 add_executable(myfind ${SOURCE_FILES})
