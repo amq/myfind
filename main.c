@@ -112,7 +112,11 @@ int check_params(char *params[]) {
 
   /* parameters start from params[2] */
   for (int i = 2; params[i]; i++) {
-    /* a parameter is considered bad unless it passes a check */
+
+    /* 0 = ok */
+    /* 1 = unknown predicate */
+    /* 2 = missing argument for predicate */
+    /* 3 = unknown argument for predicate */
     status = 1;
 
     /* parameters consisting of a single part */
@@ -122,22 +126,8 @@ int check_params(char *params[]) {
       status = 0;
     }
 
-    /* parameters expecting an unrestricted second part */
-    if ((strcmp(params[i], "-user") == 0) ||
-        (strcmp(params[i], "-name") == 0)) {
-      status = 2;
-
-      /* the second part must not be empty */
-      if (params[++i]) {
-        status = 0;
-        /* increment to the next parameter */
-        i++;
-      }
-    }
-
     /* a parameter expecting a restricted second part */
-    /* after an increment a check for params[i] is required */
-    if (params[i] && strcmp(params[i], "-type") == 0) {
+    if (strcmp(params[i], "-type") == 0) {
       status = 3;
 
       /* before doing a comparison make sure the second part is not empty */
@@ -150,6 +140,17 @@ int check_params(char *params[]) {
         }
       } else {
         status = 2;
+      }
+    }
+
+    /* parameters expecting an unrestricted second part */
+    if ((strcmp(params[i], "-user") == 0) ||
+        (strcmp(params[i], "-name") == 0)) {
+      status = 2;
+
+      /* the second part must not be empty */
+      if (params[++i]) {
+        status = 0;
       }
     }
 
