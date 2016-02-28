@@ -26,13 +26,15 @@ int main(int argc, char *argv[]) {
 
   /* both files and directories are accepted as an input */
   if (lstat(argv[1], &attr) == 0) {
+    /* process the input */
+    do_file(argv[1], argv);
+
+    /* if a directory, process its contents */
     if (S_ISDIR(attr.st_mode)) {
       do_dir(argv[1], argv);
-    } else if (S_ISREG(attr.st_mode)) {
-      do_file(argv[1], argv);
     }
   } else {
-    printf("%s: lstat(%s): %s\n", argv[0], argv[1], strerror(errno));
+    fprintf(stderr, "%s: lstat(%s): %s\n", argv[0], argv[1], strerror(errno));
     return EXIT_FAILURE;
   }
 
@@ -47,7 +49,7 @@ int do_dir(const char *location, char *params[]) {
   dir = opendir(location);
 
   if (!dir) {
-    printf("%s: opendir(%s): %s\n", params[0], location, strerror(errno));
+    fprintf(stderr, "%s: opendir(%s): %s\n", params[0], location, strerror(errno));
     return EXIT_FAILURE; /* stops a function call, the program continues */
   }
 
@@ -59,11 +61,10 @@ int do_dir(const char *location, char *params[]) {
     }
 
     /* allocate memory for the entry path */
-    char *path =
-        malloc(sizeof(char) * (strlen(location) + strlen(entry->d_name) + 2));
+    char *path = malloc(sizeof(char) * (strlen(location) + strlen(entry->d_name) + 2));
 
     if (!path) {
-      printf("%s: malloc(): %s\n", params[0], strerror(errno));
+      fprintf(stderr, "%s: malloc(): %s\n", params[0], strerror(errno));
       return EXIT_FAILURE; /* stops a function call, the program continues */
     }
 
@@ -79,14 +80,14 @@ int do_dir(const char *location, char *params[]) {
         do_dir(path, params);
       }
     } else {
-      printf("%s: lstat(%s): %s\n", params[0], location, strerror(errno));
+      fprintf(stderr, "%s: lstat(%s): %s\n", params[0], location, strerror(errno));
     }
 
     free(path);
   }
 
   if (closedir(dir) != 0) {
-    printf("%s: closedir(%s): %s\n", params[0], location, strerror(errno));
+    fprintf(stderr, "%s: closedir(%s): %s\n", params[0], location, strerror(errno));
   }
 
   return EXIT_SUCCESS;
@@ -122,16 +123,14 @@ int check_params(char *params[]) {
 
     /* parameters consisting of a single part */
     if ((strcmp(params[i], "-print") == 0) || (strcmp(params[i], "-ls") == 0) ||
-        (strcmp(params[i], "-nouser") == 0) ||
-        (strcmp(params[i], "-path") == 0)) {
+        (strcmp(params[i], "-nouser") == 0) || (strcmp(params[i], "-path") == 0)) {
       continue; /* found a match */
     }
 
     /* parameters expecting a non-empty second part */
-    if ((strcmp(params[i], "-user") == 0) ||
-        (strcmp(params[i], "-name") == 0)) {
+    if ((strcmp(params[i], "-user") == 0) || (strcmp(params[i], "-name") == 0)) {
 
-      if (params[i + 1]) {
+      if (params[++i]) {
         continue; /* found a match */
       } else {
         status = 2;
@@ -141,7 +140,7 @@ int check_params(char *params[]) {
 
     /* a parameter expecting a restricted second part */
     if (strcmp(params[i], "-type") == 0) {
-      if (params[i + 1]) {
+      if (params[++i]) {
         if ((strcmp(params[i], "b") == 0) || (strcmp(params[i], "c") == 0) ||
             (strcmp(params[i], "d") == 0) || (strcmp(params[i], "p") == 0) ||
             (strcmp(params[i], "f") == 0) || (strcmp(params[i], "l") == 0) ||
@@ -158,23 +157,22 @@ int check_params(char *params[]) {
     }
 
     status = 1; /* no match found */
-    break;      /* don't increment the counter so that we can access the state
-                   outside of the loop */
+    break;      /* don't increment the counter,
+                   so that we can access the state outside of the loop */
   }
 
   if (status == 1) {
-    printf("%s: unknown predicate: %s\n", params[0], params[i]);
+    fprintf(stderr, "%s: unknown predicate: %s\n", params[0], params[i]);
     return EXIT_FAILURE;
   }
 
   if (status == 2) {
-    printf("%s: missing argument to %s\n", params[0], params[i - 1]);
+    fprintf(stderr, "%s: missing argument to %s\n", params[0], params[i - 1]);
     return EXIT_FAILURE;
   }
 
   if (status == 3) {
-    printf("%s: unknown argument to %s: %s\n", params[0], params[i - 1],
-           params[i]);
+    fprintf(stderr, "%s: unknown argument to %s: %s\n", params[0], params[i - 1], params[i]);
     return EXIT_FAILURE;
   }
 
@@ -183,13 +181,12 @@ int check_params(char *params[]) {
 
 void print_usage(void) {
 
-  printf(
-      "myfind <file or directory> [ <aktion> ]\n"
-      "-user <name>|<uid>    entries belonging to a user\n"
-      "-name <pattern>       entry names matching a pattern\n"
-      "-type [bcdpfls]       entries of a specific type\n"
-      "-print                print entries with paths\n"
-      "-ls                   print entry details\n"
-      "-nouser               entries not belonging to a user\n"
-      "-path                 entry paths (incl. names) matching a pattern\n");
+  printf("myfind <file or directory> [ <aktion> ]\n"
+         "-user <name>|<uid>    entries belonging to a user\n"
+         "-name <pattern>       entry names matching a pattern\n"
+         "-type [bcdpfls]       entries of a specific type\n"
+         "-print                print entries with paths\n"
+         "-ls                   print entry details\n"
+         "-nouser               entries not belonging to a user\n"
+         "-path                 entry paths (incl. names) matching a pattern\n");
 }
