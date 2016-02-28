@@ -127,22 +127,20 @@ int check_params(char *params[]) {
       continue; /* found a match */
     }
 
-    /* parameters expecting an unrestricted second part */
+    /* parameters expecting a non-empty second part */
     if ((strcmp(params[i], "-user") == 0) ||
         (strcmp(params[i], "-name") == 0)) {
 
-      /* the second part must not be empty */
       if (params[++i]) {
         continue; /* found a match */
       } else {
         status = 2;
-        break; /* the second part is empty */
+        break; /* the second part is missing */
       }
     }
 
     /* a parameter expecting a restricted second part */
     if (strcmp(params[i], "-type") == 0) {
-      /* before doing a comparison make sure the second part is not empty */
       if (params[++i]) {
         if ((strcmp(params[i], "b") == 0) || (strcmp(params[i], "c") == 0) ||
             (strcmp(params[i], "d") == 0) || (strcmp(params[i], "p") == 0) ||
@@ -151,11 +149,11 @@ int check_params(char *params[]) {
           continue; /* found a match */
         } else {
           status = 3;
-          break; /* the second part is bad */
+          break; /* the second part is unknown */
         }
       } else {
         status = 2;
-        break; /* the second part is empty */
+        break; /* the second part is missing */
       }
     }
 
@@ -185,12 +183,13 @@ int check_params(char *params[]) {
 
 void print_usage() {
 
-  printf("myfind <file or directory> [ <aktion> ]\n"
-         "-user <name>|<uid>\n"
-         "-name <pattern>\n"
-         "-type [bcdpfls]\n"
-         "-print\n"
-         "-ls\n"
-         "-nouser\n"
-         "-path\n");
+  printf(
+      "myfind <file or directory> [ <aktion> ]\n"
+      "-user <name>|<uid>    entries beloning to a user\n"
+      "-name <pattern>       entry names matching a pattern\n"
+      "-type [bcdpfls]       entries of a specific type\n"
+      "-print                print entries with paths\n"
+      "-ls                   print entry details\n"
+      "-nouser               entries not beloning to a user\n"
+      "-path                 entry paths (incl. names) matching a pattern\n");
 }
