@@ -24,7 +24,8 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  /* both files and directories are accepted as an input */
+  /* try reading the attributes of the input */
+  /* to verify it exists and to check if it is a directory */
   if (lstat(argv[1], &attr) == 0) {
     /* process the input */
     do_file(argv[1], argv);
@@ -54,7 +55,6 @@ int do_dir(const char *location, char *params[]) {
   }
 
   while ((entry = readdir(dir))) {
-
     /* skip '.' and '..' */
     if (strcmp(".", entry->d_name) == 0 || strcmp("..", entry->d_name) == 0) {
       continue;
@@ -110,7 +110,7 @@ int do_file(const char *location, char *params[]) {
 }
 
 int check_params(char *params[]) {
-  int i = 0; /* we are using i outside of the loop */
+  int i = 0; /* the variable is used outside of the loop */
 
   /* 0 = ok or nothing to check */
   /* 1 = unknown predicate */
@@ -129,7 +129,6 @@ int check_params(char *params[]) {
 
     /* parameters expecting a non-empty second part */
     if ((strcmp(params[i], "-user") == 0) || (strcmp(params[i], "-name") == 0)) {
-
       if (params[++i]) {
         continue; /* found a match */
       } else {
