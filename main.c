@@ -131,7 +131,7 @@ int check_params(char *params[]) {
     if ((strcmp(params[i], "-user") == 0) ||
         (strcmp(params[i], "-name") == 0)) {
 
-      if (params[i+1]) {
+      if (params[i + 1]) {
         continue; /* found a match */
       } else {
         status = 2;
@@ -141,7 +141,7 @@ int check_params(char *params[]) {
 
     /* a parameter expecting a restricted second part */
     if (strcmp(params[i], "-type") == 0) {
-      if (params[i+1]) {
+      if (params[i + 1]) {
         if ((strcmp(params[i], "b") == 0) || (strcmp(params[i], "c") == 0) ||
             (strcmp(params[i], "d") == 0) || (strcmp(params[i], "p") == 0) ||
             (strcmp(params[i], "f") == 0) || (strcmp(params[i], "l") == 0) ||
@@ -168,12 +168,12 @@ int check_params(char *params[]) {
   }
 
   if (status == 2) {
-    printf("%s: missing argument to %s\n", params[0], params[i-1]);
+    printf("%s: missing argument to %s\n", params[0], params[i - 1]);
     return EXIT_FAILURE;
   }
 
   if (status == 3) {
-    printf("%s: unknown argument to %s: %s\n", params[0], params[i-1],
+    printf("%s: unknown argument to %s: %s\n", params[0], params[i - 1],
            params[i]);
     return EXIT_FAILURE;
   }
