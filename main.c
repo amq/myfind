@@ -20,12 +20,12 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  if (check_params(argv)) {
+  if (check_params(argv) != 0) {
     return EXIT_FAILURE;
   }
 
   /* try reading the attributes of the input */
-  /* to verify it exists and to check if it is a directory */
+  /* to verify that it exists and to check if it is a directory */
   if (lstat(argv[1], &attr) == 0) {
     /* process the input */
     do_file(argv[1], argv);
@@ -110,7 +110,7 @@ int do_file(const char *location, char *params[]) {
 }
 
 int check_params(char *params[]) {
-  int i = 0; /* the variable is used outside of the loop */
+  int i = 0; /* the counter variable is used outside of the loop */
 
   /* 0 = ok or nothing to check */
   /* 1 = unknown predicate */
@@ -156,8 +156,8 @@ int check_params(char *params[]) {
     }
 
     status = 1; /* no match found */
-    break;      /* don't increment the counter,
-                   so that we can access the state outside of the loop */
+    break;      /* do not increment the counter, */
+                /* so that the state can be accessed outside of the loop */
   }
 
   if (status == 1) {
