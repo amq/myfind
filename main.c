@@ -109,7 +109,7 @@ int do_file(const char *location, char *params[]) {
 }
 
 int check_params(char *params[]) {
-  int i;
+  int i = 0; /* we are using i outside of the loop */
 
   /* 0 = ok or nothing to check */
   /* 1 = unknown predicate */
@@ -185,11 +185,11 @@ void print_usage(void) {
 
   printf(
       "myfind <file or directory> [ <aktion> ]\n"
-      "-user <name>|<uid>    entries beloning to a user\n"
+      "-user <name>|<uid>    entries belonging to a user\n"
       "-name <pattern>       entry names matching a pattern\n"
       "-type [bcdpfls]       entries of a specific type\n"
       "-print                print entries with paths\n"
       "-ls                   print entry details\n"
-      "-nouser               entries not beloning to a user\n"
+      "-nouser               entries not belonging to a user\n"
       "-path                 entry paths (incl. names) matching a pattern\n");
 }
