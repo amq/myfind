@@ -5,10 +5,10 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-int do_dir(const char *location, char *params[]);
-int do_file(const char *location, char *params[]);
-int check_params(char *params[]);
 void print_usage(void);
+int do_dir(const char *path, char *params[]);
+int do_file(const char *path, char *params[]);
+int do_print(const char *path);
 
 int main(int argc, char *argv[]) {
   struct stat attr;
@@ -20,15 +20,13 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  if (check_params(argv) != 0) {
-    return EXIT_FAILURE;
-  }
-
   /* try reading the attributes of the input */
   /* to verify that it exists and to check if it is a directory */
   if (lstat(argv[1], &attr) == 0) {
     /* process the input */
-    do_file(argv[1], argv);
+    if (do_file(argv[1], argv) != EXIT_SUCCESS) {
+      return EXIT_FAILURE; /* the input didn't pass the parameter check */
+    }
 
     /* if a directory, process its contents */
     if (S_ISDIR(attr.st_mode)) {
@@ -42,15 +40,27 @@ int main(int argc, char *argv[]) {
   return EXIT_SUCCESS;
 }
 
-int do_dir(const char *location, char *params[]) {
+void print_usage(void) {
+
+  printf("myfind <file or directory> [ <aktion> ]\n"
+         "-user <name>|<uid>    entries belonging to a user\n"
+         "-name <pattern>       entry names matching a pattern\n"
+         "-type [bcdpfls]       entries of a specific type\n"
+         "-print                print entries with paths\n"
+         "-ls                   print entry details\n"
+         "-nouser               entries not belonging to a user\n"
+         "-path                 entry paths (incl. names) matching a pattern\n");
+}
+
+int do_dir(const char *path, char *params[]) {
   DIR *dir;
   struct dirent *entry;
   struct stat attr;
 
-  dir = opendir(location);
+  dir = opendir(path);
 
   if (!dir) {
-    fprintf(stderr, "%s: opendir(%s): %s\n", params[0], location, strerror(errno));
+    fprintf(stderr, "%s: opendir(%s): %s\n", params[0], path, strerror(errno));
     return EXIT_FAILURE; /* stops a function call, the program continues */
   }
 
@@ -60,56 +70,40 @@ int do_dir(const char *location, char *params[]) {
       continue;
     }
 
-    /* allocate memory for the entry path */
-    char *path = malloc(sizeof(char) * (strlen(location) + strlen(entry->d_name) + 2));
+    /* allocate memory for the full entry path */
+    char *full_path = malloc(sizeof(char) * (strlen(path) + strlen(entry->d_name) + 2));
 
-    if (!path) {
+    if (!full_path) {
       fprintf(stderr, "%s: malloc(): %s\n", params[0], strerror(errno));
       return EXIT_FAILURE; /* stops a function call, the program continues */
     }
 
     /* concat the path with the entry name */
-    sprintf(path, "%s/%s", location, entry->d_name);
+    sprintf(full_path, "%s/%s", path, entry->d_name);
 
     /* process the entry */
-    do_file(path, params);
+    do_file(full_path, params);
 
     /* if the entry is a directory, call the function recursively */
-    if (lstat(path, &attr) == 0) {
+    if (lstat(full_path, &attr) == 0) {
       if (S_ISDIR(attr.st_mode)) {
-        do_dir(path, params);
+        do_dir(full_path, params);
       }
     } else {
-      fprintf(stderr, "%s: lstat(%s): %s\n", params[0], location, strerror(errno));
+      fprintf(stderr, "%s: lstat(%s): %s\n", params[0], full_path, strerror(errno));
     }
 
-    free(path);
+    free(full_path);
   }
 
   if (closedir(dir) != 0) {
-    fprintf(stderr, "%s: closedir(%s): %s\n", params[0], location, strerror(errno));
+    fprintf(stderr, "%s: closedir(%s): %s\n", params[0], path, strerror(errno));
   }
 
   return EXIT_SUCCESS;
 }
 
-int do_file(const char *location, char *params[]) {
-
-  /* parameters start from params[2] */
-  for (int i = 2; params[i]; i++) {
-
-    if (strcmp(params[i], "-print") == 0) {
-      printf("%s\n", location);
-    }
-    if (strcmp(params[i], "-ls") == 0) {
-      /* TODO */
-    }
-  }
-
-  return EXIT_SUCCESS;
-}
-
-int check_params(char *params[]) {
+int do_file(const char *path, char *params[]) {
   int i = 0; /* the counter variable is used outside of the loop */
 
   /* 0 = ok or nothing to check */
@@ -122,15 +116,37 @@ int check_params(char *params[]) {
   for (i = 2; params[i]; i++) {
 
     /* parameters consisting of a single part */
-    if ((strcmp(params[i], "-print") == 0) || (strcmp(params[i], "-ls") == 0) ||
-        (strcmp(params[i], "-nouser") == 0) || (strcmp(params[i], "-path") == 0)) {
-      continue; /* found a match */
+    if (strcmp(params[i], "-print") == 0) {
+      do_print(path);
+      continue;
+    }
+    if (strcmp(params[i], "-ls") == 0) {
+      /* do_ls(path); */
+      continue;
+    }
+    if (strcmp(params[i], "-nouser") == 0) {
+      /* do_nouser(path); */
+      continue;
+    }
+    if (strcmp(params[i], "-path") == 0) {
+      /* do_path(path); */
+      continue;
     }
 
     /* parameters expecting a non-empty second part */
-    if ((strcmp(params[i], "-user") == 0) || (strcmp(params[i], "-name") == 0)) {
+    if (strcmp(params[i], "-user") == 0) {
       if (params[++i]) {
-        continue; /* found a match */
+        /* do_user(path, params[i]); */
+        continue;
+      } else {
+        status = 2;
+        break; /* the second part is missing */
+      }
+    }
+    if (strcmp(params[i], "-name") == 0) {
+      if (params[++i]) {
+        /* do_name(path, params[i]); */
+        continue;
       } else {
         status = 2;
         break; /* the second part is missing */
@@ -144,7 +160,8 @@ int check_params(char *params[]) {
             (strcmp(params[i], "d") == 0) || (strcmp(params[i], "p") == 0) ||
             (strcmp(params[i], "f") == 0) || (strcmp(params[i], "l") == 0) ||
             (strcmp(params[i], "s") == 0)) {
-          continue; /* found a match */
+          /* do_type(path, params[i]); */
+          continue;
         } else {
           status = 3;
           break; /* the second part is unknown */
@@ -178,14 +195,7 @@ int check_params(char *params[]) {
   return EXIT_SUCCESS;
 }
 
-void print_usage(void) {
-
-  printf("myfind <file or directory> [ <aktion> ]\n"
-         "-user <name>|<uid>    entries belonging to a user\n"
-         "-name <pattern>       entry names matching a pattern\n"
-         "-type [bcdpfls]       entries of a specific type\n"
-         "-print                print entries with paths\n"
-         "-ls                   print entry details\n"
-         "-nouser               entries not belonging to a user\n"
-         "-path                 entry paths (incl. names) matching a pattern\n");
+int do_print(const char *path) {
+  printf("%s\n", path);
+  return EXIT_SUCCESS;
 }
