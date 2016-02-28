@@ -59,7 +59,8 @@ int do_dir(const char *location, char *params[]) {
     }
 
     /* allocate memory for the entry path */
-    char *path = malloc(strlen(location) + strlen(entry->d_name) + 2);
+    char *path =
+        malloc(sizeof(char) * (strlen(location) + strlen(entry->d_name) + 1));
 
     if (!path) {
       printf("%s: malloc(): %s\n", params[0], strerror(errno));
@@ -108,67 +109,75 @@ int do_file(const char *location, char *params[]) {
 }
 
 int check_params(char *params[]) {
-  int status;
+  int i;
+
+  /* 0 = ok or nothing to check */
+  /* 1 = unknown predicate */
+  /* 2 = missing argument for predicate */
+  /* 3 = unknown argument for predicate */
+  int status = 0;
 
   /* parameters start from params[2] */
-  for (int i = 2; params[i]; i++) {
-
-    /* 0 = ok */
-    /* 1 = unknown predicate */
-    /* 2 = missing argument for predicate */
-    /* 3 = unknown argument for predicate */
-    status = 1;
+  for (i = 2; params[i]; i++) {
 
     /* parameters consisting of a single part */
     if ((strcmp(params[i], "-print") == 0) || (strcmp(params[i], "-ls") == 0) ||
         (strcmp(params[i], "-nouser") == 0) ||
         (strcmp(params[i], "-path") == 0)) {
-      status = 0;
+      continue; /* found a match */
+    }
+
+    /* parameters expecting an unrestricted second part */
+    if ((strcmp(params[i], "-user") == 0) ||
+        (strcmp(params[i], "-name") == 0)) {
+
+      /* the second part must not be empty */
+      if (params[++i]) {
+        continue; /* found a match */
+      } else {
+        status = 2;
+        break; /* the second part is empty */
+      }
     }
 
     /* a parameter expecting a restricted second part */
     if (strcmp(params[i], "-type") == 0) {
-      status = 3;
-
       /* before doing a comparison make sure the second part is not empty */
       if (params[++i]) {
         if ((strcmp(params[i], "b") == 0) || (strcmp(params[i], "c") == 0) ||
             (strcmp(params[i], "d") == 0) || (strcmp(params[i], "p") == 0) ||
             (strcmp(params[i], "f") == 0) || (strcmp(params[i], "l") == 0) ||
             (strcmp(params[i], "s") == 0)) {
-          status = 0;
+          continue; /* found a match */
+        } else {
+          status = 3;
+          break; /* the second part is bad */
         }
       } else {
         status = 2;
+        break; /* the second part is empty */
       }
     }
 
-    /* parameters expecting an unrestricted second part */
-    if ((strcmp(params[i], "-user") == 0) ||
-        (strcmp(params[i], "-name") == 0)) {
-      status = 2;
+    status = 1; /* no match found */
+    break;      /* don't increment the counter so that we can access the state
+                   outside of the loop */
+  }
 
-      /* the second part must not be empty */
-      if (params[++i]) {
-        status = 0;
-      }
-    }
+  if (status == 1) {
+    printf("%s: unknown predicate: %s\n", params[0], params[i]);
+    return EXIT_FAILURE;
+  }
 
-    if (status == 1) {
-      printf("%s: unknown predicate: %s\n", params[0], params[i]);
-      return EXIT_FAILURE;
-    }
+  if (status == 2) {
+    printf("%s: missing argument to %s\n", params[0], params[--i]);
+    return EXIT_FAILURE;
+  }
 
-    if (status == 2) {
-      printf("%s: missing argument to %s\n", params[0], params[--i]);
-      return EXIT_FAILURE;
-    }
-
-    if (status == 3) {
-      printf("%s: unknown argument to %s: %s\n", params[0], params[--i],
-             params[i]);
-      return EXIT_FAILURE;
-    }
+  if (status == 3) {
+    printf("%s: unknown argument to %s: %s\n", params[0], params[--i],
+           params[i]);
+    return EXIT_FAILURE;
   }
 
   return EXIT_SUCCESS;
