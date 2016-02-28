@@ -60,7 +60,7 @@ int do_dir(const char *location, char *params[]) {
 
     /* allocate memory for the entry path */
     char *path =
-        malloc(sizeof(char) * (strlen(location) + strlen(entry->d_name) + 1));
+        malloc(sizeof(char) * (strlen(location) + strlen(entry->d_name) + 2));
 
     if (!path) {
       printf("%s: malloc(): %s\n", params[0], strerror(errno));
