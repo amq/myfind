@@ -9,6 +9,18 @@ void print_usage(void);
 int do_dir(const char *path, char *params[]);
 int do_file(const char *path, char *params[]);
 int do_print(const char *path);
+/*
+int do_ls(const char *path);
+int do_nouser(const char *path);
+int do_path(const char *path);
+int do_user(const char *path, char *user);
+int do_name(const char *path, char *name);
+int do_type(const char *path, char *type);
+*/
+
+/* a global variable containing the program name */
+/* used for error messages */
+char *program;
 
 int main(int argc, char *argv[]) {
   struct stat attr;
@@ -19,6 +31,8 @@ int main(int argc, char *argv[]) {
     print_usage();
     return EXIT_FAILURE;
   }
+
+  program = argv[0];
 
   /* try reading the attributes of the input */
   /* to verify that it exists and to check if it is a directory */
@@ -33,7 +47,7 @@ int main(int argc, char *argv[]) {
       do_dir(argv[1], argv);
     }
   } else {
-    fprintf(stderr, "%s: lstat(%s): %s\n", argv[0], argv[1], strerror(errno));
+    fprintf(stderr, "%s: lstat(%s): %s\n", program, argv[1], strerror(errno));
     return EXIT_FAILURE;
   }
 
@@ -42,14 +56,16 @@ int main(int argc, char *argv[]) {
 
 void print_usage(void) {
 
-  printf("myfind <file or directory> [ <aktion> ]\n"
-         "-user <name>|<uid>    entries belonging to a user\n"
-         "-name <pattern>       entry names matching a pattern\n"
-         "-type [bcdpfls]       entries of a specific type\n"
-         "-print                print entries with paths\n"
-         "-ls                   print entry details\n"
-         "-nouser               entries not belonging to a user\n"
-         "-path                 entry paths (incl. names) matching a pattern\n");
+  if (printf("myfind <file or directory> [ <aktion> ]\n"
+             "-user <name>|<uid>    entries belonging to a user\n"
+             "-name <pattern>       entry names matching a pattern\n"
+             "-type [bcdpfls]       entries of a specific type\n"
+             "-print                print entries with paths\n"
+             "-ls                   print entry details\n"
+             "-nouser               entries not belonging to a user\n"
+             "-path                 entry paths (incl. names) matching a pattern\n") < 0) {
+    fprintf(stderr, "%s: printf() failed\n", program);
+  }
 }
 
 int do_dir(const char *path, char *params[]) {
@@ -60,7 +76,7 @@ int do_dir(const char *path, char *params[]) {
   dir = opendir(path);
 
   if (!dir) {
-    fprintf(stderr, "%s: opendir(%s): %s\n", params[0], path, strerror(errno));
+    fprintf(stderr, "%s: opendir(%s): %s\n", program, path, strerror(errno));
     return EXIT_FAILURE; /* stops a function call, the program continues */
   }
 
@@ -74,7 +90,7 @@ int do_dir(const char *path, char *params[]) {
     char *full_path = malloc(sizeof(char) * (strlen(path) + strlen(entry->d_name) + 2));
 
     if (!full_path) {
-      fprintf(stderr, "%s: malloc(): %s\n", params[0], strerror(errno));
+      fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
       return EXIT_FAILURE; /* stops a function call, the program continues */
     }
 
@@ -90,14 +106,14 @@ int do_dir(const char *path, char *params[]) {
         do_dir(full_path, params);
       }
     } else {
-      fprintf(stderr, "%s: lstat(%s): %s\n", params[0], full_path, strerror(errno));
+      fprintf(stderr, "%s: lstat(%s): %s\n", program, full_path, strerror(errno));
     }
 
     free(full_path);
   }
 
   if (closedir(dir) != 0) {
-    fprintf(stderr, "%s: closedir(%s): %s\n", params[0], path, strerror(errno));
+    fprintf(stderr, "%s: closedir(%s): %s\n", program, path, strerror(errno));
   }
 
   return EXIT_SUCCESS;
@@ -178,17 +194,17 @@ int do_file(const char *path, char *params[]) {
   }
 
   if (status == 1) {
-    fprintf(stderr, "%s: unknown predicate: %s\n", params[0], params[i]);
+    fprintf(stderr, "%s: unknown predicate: %s\n", program, params[i]);
     return EXIT_FAILURE;
   }
 
   if (status == 2) {
-    fprintf(stderr, "%s: missing argument to %s\n", params[0], params[i - 1]);
+    fprintf(stderr, "%s: missing argument to %s\n", program, params[i - 1]);
     return EXIT_FAILURE;
   }
 
   if (status == 3) {
-    fprintf(stderr, "%s: unknown argument to %s: %s\n", params[0], params[i - 1], params[i]);
+    fprintf(stderr, "%s: unknown argument to %s: %s\n", program, params[i - 1], params[i]);
     return EXIT_FAILURE;
   }
 
@@ -196,6 +212,8 @@ int do_file(const char *path, char *params[]) {
 }
 
 int do_print(const char *path) {
-  printf("%s\n", path);
+  if (printf("%s\n", path) < 0) {
+    fprintf(stderr, "%s: printf() failed\n", program);
+  }
   return EXIT_SUCCESS;
 }
