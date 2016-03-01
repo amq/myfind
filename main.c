@@ -106,8 +106,8 @@ void print_usage(void) {
 /**
  * @brief calls do_file on each directory entry recursively
  *
- * @param path
- * @param params
+ * @param path the path to be processed
+ * @param params the arguments from argv
  *
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
@@ -169,8 +169,8 @@ int do_dir(char *path, char *params[]) {
 /**
  * @brief calls a subfunction on the path based on a parameter match
  *
- * @param path
- * @param params
+ * @param path the path to be processed
+ * @param params the arguments from argv
  *
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
@@ -271,7 +271,7 @@ int do_file(char *path, char *params[]) {
 /*
  * @brief prints out the path
  *
- * @param path
+ * @param path the path to be processed
  *
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
