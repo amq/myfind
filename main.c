@@ -5,21 +5,32 @@
 #include <sys/stat.h>
 #include <errno.h>
 
+/* Why not "const char *path"? */
+/* Because we are always passing the path by value */
+
+/* Why not "const char *params[]"? */
+/* The parameters argc and argv and the strings */
+/* pointed to by the argv array shall be modifiable */
+/* by the program, and retain their last-stored values */
+/* between program startup and program termination */
+/* C11 standard draft N1570, §5.1.2.2.1/2 */
+
 void print_usage(void);
-int do_dir(const char *path, char *params[]);
-int do_file(const char *path, char *params[]);
-int do_print(const char *path);
+int do_dir(char *path, char *params[]);
+int do_file(char *path, char *params[]);
+int do_print(char *path);
 /*
-int do_ls(const char *path);
-int do_nouser(const char *path);
-int do_path(const char *path);
-int do_user(const char *path, char *user);
-int do_name(const char *path, char *name);
-int do_type(const char *path, char *type);
+int do_ls(char *path);
+int do_nouser(char *path);
+int do_path(char *path);
+int do_user(char *path, char *user);
+int do_name(char *path, char *name);
+int do_type(char *path, char *type);
 */
 
 /* a global variable containing the program name */
 /* used for error messages */
+/* spares us one argument for each primitive function */
 char *program;
 
 int main(int argc, char *argv[]) {
@@ -68,7 +79,7 @@ void print_usage(void) {
   }
 }
 
-int do_dir(const char *path, char *params[]) {
+int do_dir(char *path, char *params[]) {
   DIR *dir;
   struct dirent *entry;
   struct stat attr;
@@ -119,7 +130,7 @@ int do_dir(const char *path, char *params[]) {
   return EXIT_SUCCESS;
 }
 
-int do_file(const char *path, char *params[]) {
+int do_file(char *path, char *params[]) {
   int i = 0; /* the counter variable is used outside of the loop */
 
   /* 0 = ok or nothing to check */
@@ -211,9 +222,10 @@ int do_file(const char *path, char *params[]) {
   return EXIT_SUCCESS;
 }
 
-int do_print(const char *path) {
+int do_print(char *path) {
   if (printf("%s\n", path) < 0) {
     fprintf(stderr, "%s: printf() failed\n", program);
+    return EXIT_FAILURE;
   }
   return EXIT_SUCCESS;
 }
