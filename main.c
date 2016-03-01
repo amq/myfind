@@ -6,13 +6,11 @@
 #include <errno.h>
 
 /*
- * Why not "const char *path"?
- * Because we are always passing the path by value
- */
-
-/*
- * Why not "const char *params[]"?
- * The parameters argc and argv and the strings
+ * why not "const char *path"?
+ * because we are always passing the path by value
+ *
+ * why not "const char *params[]"?
+ * the parameters argc and argv and the strings
  * pointed to by the argv array shall be modifiable
  * by the program, and retain their last-stored values
  * between program startup and program termination
@@ -32,13 +30,22 @@ int do_name(char *path, char *name);
 int do_type(char *path, char *type);
 */
 
-/*
+/**
  * a global variable containing the program name
- * used for error messages
+ * used for error messages,
  * spares us one argument for each subfunction
  */
 char *program;
 
+/**
+ * @brief calls do_file on argv[1] and additionally do_dir if a directory
+ *
+ * @param argc number of arguments
+ * @param argv the arguments
+ *
+ * @retval EXIT_SUCCESS
+ * @retval EXIT_FAILURE
+ */
 int main(int argc, char *argv[]) {
   struct stat attr;
 
@@ -75,6 +82,13 @@ int main(int argc, char *argv[]) {
   return EXIT_SUCCESS;
 }
 
+/**
+ * @brief prints out the program usage
+ *
+ * @param void
+ *
+ * @retval void
+ */
 void print_usage(void) {
 
   if (printf("myfind <file or directory> [ <aktion> ]\n"
@@ -89,6 +103,15 @@ void print_usage(void) {
   }
 }
 
+/**
+ * @brief calls do_file on each directory entry recursively
+ *
+ * @param path
+ * @param params
+ *
+ * @retval EXIT_SUCCESS
+ * @retval EXIT_FAILURE
+ */
 int do_dir(char *path, char *params[]) {
   DIR *dir;
   struct dirent *entry;
@@ -112,7 +135,7 @@ int do_dir(char *path, char *params[]) {
 
     if (!full_path) {
       fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
-      return EXIT_FAILURE; /* stops a function call, the program continues */
+      return EXIT_FAILURE;
     }
 
     /* concat the path with the entry name */
@@ -128,6 +151,8 @@ int do_dir(char *path, char *params[]) {
       }
     } else {
       fprintf(stderr, "%s: lstat(%s): %s\n", program, full_path, strerror(errno));
+      free(full_path);
+      return EXIT_FAILURE;
     }
 
     free(full_path);
@@ -135,11 +160,21 @@ int do_dir(char *path, char *params[]) {
 
   if (closedir(dir) != 0) {
     fprintf(stderr, "%s: closedir(%s): %s\n", program, path, strerror(errno));
+    return EXIT_FAILURE;
   }
 
   return EXIT_SUCCESS;
 }
 
+/**
+ * @brief calls a subfunction on the path based on a parameter match
+ *
+ * @param path
+ * @param params
+ *
+ * @retval EXIT_SUCCESS
+ * @retval EXIT_FAILURE
+ */
 int do_file(char *path, char *params[]) {
   int i = 0; /* the counter variable is used outside of the loop */
 
@@ -233,6 +268,14 @@ int do_file(char *path, char *params[]) {
   return EXIT_SUCCESS;
 }
 
+/*
+ * @brief prints out the path
+ *
+ * @param path
+ *
+ * @retval EXIT_SUCCESS
+ * @retval EXIT_FAILURE
+ */
 int do_print(char *path) {
 
   if (printf("%s\n", path) < 0) {
