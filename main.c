@@ -5,15 +5,19 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-/* Why not "const char *path"? */
-/* Because we are always passing the path by value */
+/*
+ * Why not "const char *path"?
+ * Because we are always passing the path by value
+ */
 
-/* Why not "const char *params[]"? */
-/* The parameters argc and argv and the strings */
-/* pointed to by the argv array shall be modifiable */
-/* by the program, and retain their last-stored values */
-/* between program startup and program termination */
-/* C11 standard draft N1570, §5.1.2.2.1/2 */
+/*
+ * Why not "const char *params[]"?
+ * The parameters argc and argv and the strings
+ * pointed to by the argv array shall be modifiable
+ * by the program, and retain their last-stored values
+ * between program startup and program termination
+ * C11 standard draft N1570, §5.1.2.2.1/2
+ */
 
 void print_usage(void);
 int do_dir(char *path, char *params[]);
@@ -28,16 +32,20 @@ int do_name(char *path, char *name);
 int do_type(char *path, char *type);
 */
 
-/* a global variable containing the program name */
-/* used for error messages */
-/* spares us one argument for each primitive function */
+/*
+ * a global variable containing the program name
+ * used for error messages
+ * spares us one argument for each subfunction
+ */
 char *program;
 
 int main(int argc, char *argv[]) {
   struct stat attr;
 
-  /* a minimum of 3 input parameters are required */
-  /* myfind <file or directory> [ <aktion> ] */
+  /*
+   * a minimum of 3 input parameters are required
+   * myfind <file or directory> [ <aktion> ]
+   */
   if (argc < 3) {
     print_usage();
     return EXIT_FAILURE;
@@ -45,8 +53,10 @@ int main(int argc, char *argv[]) {
 
   program = argv[0];
 
-  /* try reading the attributes of the input */
-  /* to verify that it exists and to check if it is a directory */
+  /*
+   * try reading the attributes of the input
+   * to verify that it exists and to check if it is a directory
+   */
   if (lstat(argv[1], &attr) == 0) {
     /* process the input */
     if (do_file(argv[1], argv) != EXIT_SUCCESS) {
@@ -133,10 +143,12 @@ int do_dir(char *path, char *params[]) {
 int do_file(char *path, char *params[]) {
   int i = 0; /* the counter variable is used outside of the loop */
 
-  /* 0 = ok or nothing to check */
-  /* 1 = unknown predicate */
-  /* 2 = missing argument for predicate */
-  /* 3 = unknown argument for predicate */
+  /*
+   * 0 = ok or nothing to check
+   * 1 = unknown predicate
+   * 2 = missing argument for predicate
+   * 3 = unknown argument for predicate
+   */
   int status = 0;
 
   /* parameters start from params[2] */
@@ -200,8 +212,7 @@ int do_file(char *path, char *params[]) {
     }
 
     status = 1; /* no match found */
-    break;      /* do not increment the counter, */
-                /* so that the state can be accessed outside of the loop */
+    break;      /* do not increment the counter */
   }
 
   if (status == 1) {
@@ -223,9 +234,11 @@ int do_file(char *path, char *params[]) {
 }
 
 int do_print(char *path) {
+
   if (printf("%s\n", path) < 0) {
     fprintf(stderr, "%s: printf() failed\n", program);
     return EXIT_FAILURE;
   }
+
   return EXIT_SUCCESS;
 }
