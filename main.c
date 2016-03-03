@@ -105,13 +105,13 @@ int main(int argc, char *argv[]) {
 void print_usage(void) {
 
   if (printf("myfind <file or directory> [ <aktion> ]\n"
-             "-user <name>|<uid>    entries belonging to a user\n"
-             "-name <pattern>       entry names matching a pattern\n"
-             "-type [bcdpfls]       entries of a specific type\n"
-             "-print                print entries with paths\n"
-             "-ls                   print entry details\n"
-             "-nouser               entries not belonging to a user\n"
-             "-path                 entry paths (incl. names) matching a pattern\n") < 0) {
+             "-user <name>|<uid>  entries belonging to a user\n"
+             "-name <pattern>     entry names matching a pattern\n"
+             "-type [bcdpfls]     entries of a specific type\n"
+             "-print              print entries with paths\n"
+             "-ls                 print entry details\n"
+             "-nouser             entries not belonging to a user\n"
+             "-path               entry paths (incl. names) matching a pattern\n") < 0) {
     fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
   }
 }
@@ -200,78 +200,78 @@ int do_file(char *path, char *params[], struct stat attr) {
    */
   int status = 0;
 
-  /* the matching should be performed just once */
-  if (!checked) {
-    /* parameters start from params[2] */
-    for (i = 2; params[i]; i++) {
+  /*
+   * parameters start from params[2]
+   * the checked variable makes sure the matching is done just once
+   */
+  for (i = 2; !checked && params[i]; i++) {
 
-      /* parameters consisting of a single part */
-      if (strcmp(params[i], "-print") == 0) {
-        s_print = 1;
-        continue;
-      }
-      if (strcmp(params[i], "-ls") == 0) {
-        s_ls = 1;
-        continue;
-      }
-      if (strcmp(params[i], "-nouser") == 0) {
-        s_nouser = 1;
-        continue;
-      }
-
-      /* parameters expecting a non-empty second part */
-      if (strcmp(params[i], "-user") == 0) {
-        if (params[++i]) {
-          s_user = i; /* save the argument number of the second part,
-                         so that it can be accessed with params[s_user] */
-          continue;
-        } else {
-          status = 2;
-          break; /* the second part is missing */
-        }
-      }
-      if (strcmp(params[i], "-name") == 0) {
-        if (params[++i]) {
-          s_name = i;
-          continue;
-        } else {
-          status = 2;
-          break; /* the second part is missing */
-        }
-      }
-      if (strcmp(params[i], "-path") == 0) {
-        if (params[++i]) {
-          s_path = i;
-          continue;
-        } else {
-          status = 2;
-          break; /* the second part is missing */
-        }
-      }
-
-      /* a parameter expecting a restricted second part */
-      if (strcmp(params[i], "-type") == 0) {
-        if (params[++i]) {
-          if ((strcmp(params[i], "b") == 0) || (strcmp(params[i], "c") == 0) ||
-              (strcmp(params[i], "d") == 0) || (strcmp(params[i], "p") == 0) ||
-              (strcmp(params[i], "f") == 0) || (strcmp(params[i], "l") == 0) ||
-              (strcmp(params[i], "s") == 0)) {
-            s_type = i;
-            continue;
-          } else {
-            status = 3;
-            break; /* the second part is unknown */
-          }
-        } else {
-          status = 2;
-          break; /* the second part is missing */
-        }
-      }
-
-      status = 1; /* no match found */
-      break;      /* do not increment the counter,
-                     so that we can access the current state in error handling */
+    /* parameters consisting of a single part */
+    if (strcmp(params[i], "-print") == 0) {
+      s_print = 1;
+      continue;
     }
+    if (strcmp(params[i], "-ls") == 0) {
+      s_ls = 1;
+      continue;
+    }
+    if (strcmp(params[i], "-nouser") == 0) {
+      s_nouser = 1;
+      continue;
+    }
+
+    /* parameters expecting a non-empty second part */
+    if (strcmp(params[i], "-user") == 0) {
+      if (params[++i]) {
+        s_user = i; /* save the argument number of the second part,
+                       so that it can be accessed with params[s_user] */
+        continue;
+      } else {
+        status = 2;
+        break; /* the second part is missing */
+      }
+    }
+    if (strcmp(params[i], "-name") == 0) {
+      if (params[++i]) {
+        s_name = i;
+        continue;
+      } else {
+        status = 2;
+        break; /* the second part is missing */
+      }
+    }
+    if (strcmp(params[i], "-path") == 0) {
+      if (params[++i]) {
+        s_path = i;
+        continue;
+      } else {
+        status = 2;
+        break; /* the second part is missing */
+      }
+    }
+
+    /* a parameter expecting a restricted second part */
+    if (strcmp(params[i], "-type") == 0) {
+      if (params[++i]) {
+        if ((strcmp(params[i], "b") == 0) || (strcmp(params[i], "c") == 0) ||
+            (strcmp(params[i], "d") == 0) || (strcmp(params[i], "p") == 0) ||
+            (strcmp(params[i], "f") == 0) || (strcmp(params[i], "l") == 0) ||
+            (strcmp(params[i], "s") == 0)) {
+          s_type = i;
+          continue;
+        } else {
+          status = 3;
+          break; /* the second part is unknown */
+        }
+      } else {
+        status = 2;
+        break; /* the second part is missing */
+      }
+    }
+
+    status = 1; /* no match found */
+    break;      /* do not increment the counter,
+                   so that we can access the current state in error handling */
   }
 
   checked = 1;
@@ -538,7 +538,7 @@ char *do_get_mtime(struct stat attr) {
     fprintf(stderr, "%s: strftime() failed\n", program);
   }
 
-  mtime[13] = '\0';
+  mtime[12] = '\0';
 
   return mtime;
 }
