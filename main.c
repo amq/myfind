@@ -21,12 +21,24 @@
  * why do we need the attr everywhere?
  * it lets us do the lstat system call exactly once
  * per entry without repeating it in subfunctions
+ *
+ * why did we separate the parameter validation from do_file?
+ * it lets us perform the parameter check once
+ * without of repeating it for each entry
  */
+
+#define S_PRINT 0
+#define S_LS 1
+#define S_TYPE 2
+#define S_NOUSER 3
+#define S_USER 4
+#define S_PATH 5
+#define S_NAME 6
 
 void print_usage(void);
 
-int do_dir(char *path, char *params[], struct stat attr);
-int do_file(char *path, char *params[], struct stat attr);
+int do_dir(char *path, char *params[], int *actions, struct stat attr);
+int do_file(char *path, char *params[], int *actions, struct stat attr);
 
 int do_print(char *path);
 int do_ls(char *path, struct stat attr);
@@ -36,6 +48,7 @@ int do_user(char *user, struct stat attr);
 int do_path(char *path, char *pattern);
 int do_name(char *path, char *pattern);
 
+int do_validate_params(char *params[], int param_start, int *actions);
 char *do_get_perms(struct stat attr);
 char do_get_type(struct stat attr);
 char *do_get_mtime(struct stat attr);
@@ -60,31 +73,36 @@ char *program;
  */
 int main(int argc, char *argv[]) {
   struct stat attr;
-
-  /*
-   * a minimum of 3 input parameters are required
-   * myfind <file or directory> [ <aktion> ]
-   */
-  if (argc < 3) {
-    print_usage();
-    return EXIT_FAILURE;
-  }
+  char *path = ".";
+  int actions[7] = {0};
 
   program = argv[0];
+
+  if (argc == 2) {
+    if (do_validate_params(argv, 1, actions) != EXIT_SUCCESS) {
+      path = argv[1];
+    }
+  }
+  if (argc >= 3) {
+    if (do_validate_params(argv, 2, actions) != EXIT_SUCCESS) {
+      return EXIT_FAILURE;
+    }
+    path = argv[1];
+  }
 
   /*
    * try reading the attributes of the input
    * to verify that it exists and to check if it is a directory
    */
-  if (lstat(argv[1], &attr) == 0) {
+  if (lstat(path, &attr) == 0) {
     /* process the input */
-    if (do_file(argv[1], argv, attr) != EXIT_SUCCESS) {
+    if (do_file(path, argv, actions, attr) != EXIT_SUCCESS) {
       return EXIT_FAILURE; /* the input didn't pass the parameter check */
     }
 
     /* if a directory, process its contents */
     if (S_ISDIR(attr.st_mode)) {
-      do_dir(argv[1], argv, attr);
+      do_dir(path, argv, actions, attr);
     }
   } else {
     fprintf(stderr, "%s: lstat(%s): %s\n", program, argv[1], strerror(errno));
@@ -124,7 +142,7 @@ void print_usage(void) {
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
-int do_dir(char *path, char *params[], struct stat attr) {
+int do_dir(char *path, char *params[], int *actions, struct stat attr) {
   DIR *dir;
   struct dirent *entry;
 
@@ -142,7 +160,8 @@ int do_dir(char *path, char *params[], struct stat attr) {
     }
 
     /* allocate memory for the full entry path */
-    char *full_path = malloc(sizeof(char) * (strlen(path) + strlen(entry->d_name) + 2));
+    size_t length = strlen(path) + strlen(entry->d_name) + 2;
+    char *full_path = malloc(sizeof(char) * length);
 
     if (!full_path) {
       fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
@@ -150,15 +169,17 @@ int do_dir(char *path, char *params[], struct stat attr) {
     }
 
     /* concat the path with the entry name */
-    sprintf(full_path, "%s/%s", path, entry->d_name);
+    if (snprintf(full_path, length, "%s/%s", path, entry->d_name) < 0) {
+      fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
+    }
 
     /* process the entry */
     if (lstat(full_path, &attr) == 0) {
-      do_file(full_path, params, attr);
+      do_file(full_path, params, actions, attr);
 
       /* if a directory, call the function recursively */
       if (S_ISDIR(attr.st_mode)) {
-        do_dir(full_path, params, attr);
+        do_dir(full_path, params, actions, attr);
       }
     } else {
       fprintf(stderr, "%s: lstat(%s): %s\n", program, full_path, strerror(errno));
@@ -178,7 +199,7 @@ int do_dir(char *path, char *params[], struct stat attr) {
 }
 
 /**
- * @brief calls a subfunction on the path based on a parameter match
+ * @brief calls a subfunction on the path based on actions
  *
  * @param path the path to be processed
  * @param params the arguments from argv
@@ -186,125 +207,35 @@ int do_dir(char *path, char *params[], struct stat attr) {
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
-int do_file(char *path, char *params[], struct stat attr) {
-  int i = 0; /* the counter variable is used outside of the loop */
-  int s_print = 0, s_ls = 0, s_nouser = 0, s_user = 0, s_name = 0, s_path = 0, s_type = 0;
-
-  /*
-   * 0 = ok or nothing to check
-   * 1 = unknown predicate
-   * 2 = missing argument for predicate
-   * 3 = unknown argument for predicate
-   */
-  int status = 0;
-
-  /* parameters start from params[2] */
-  for (i = 2; params[i]; i++) {
-
-    /* parameters consisting of a single part */
-    if (strcmp(params[i], "-print") == 0) {
-      s_print = 1;
-      continue;
-    }
-    if (strcmp(params[i], "-ls") == 0) {
-      s_ls = 1;
-      continue;
-    }
-    if (strcmp(params[i], "-nouser") == 0) {
-      s_nouser = 1;
-      continue;
-    }
-
-    /* parameters expecting a non-empty second part */
-    if (strcmp(params[i], "-user") == 0) {
-      if (params[++i]) {
-        s_user = i; /* save the argument number of the second part,
-                       so that it can be accessed with params[s_user] */
-        continue;
-      } else {
-        status = 2;
-        break; /* the second part is missing */
-      }
-    }
-    if (strcmp(params[i], "-name") == 0) {
-      if (params[++i]) {
-        s_name = i;
-        continue;
-      } else {
-        status = 2;
-        break; /* the second part is missing */
-      }
-    }
-    if (strcmp(params[i], "-path") == 0) {
-      if (params[++i]) {
-        s_path = i;
-        continue;
-      } else {
-        status = 2;
-        break; /* the second part is missing */
-      }
-    }
-
-    /* a parameter expecting a restricted second part */
-    if (strcmp(params[i], "-type") == 0) {
-      if (params[++i]) {
-        if ((strcmp(params[i], "b") == 0) || (strcmp(params[i], "c") == 0) ||
-            (strcmp(params[i], "d") == 0) || (strcmp(params[i], "p") == 0) ||
-            (strcmp(params[i], "f") == 0) || (strcmp(params[i], "l") == 0) ||
-            (strcmp(params[i], "s") == 0)) {
-          s_type = i;
-          continue;
-        } else {
-          status = 3;
-          break; /* the second part is unknown */
-        }
-      } else {
-        status = 2;
-        break; /* the second part is missing */
-      }
-    }
-
-    status = 1; /* no match found */
-    break;      /* do not increment the counter,
-                   so that we can access the current state in error handling */
-  }
-
-  /* error handling */
-  if (status == 1) {
-    fprintf(stderr, "%s: unknown predicate: %s\n", program, params[i]);
-    return EXIT_FAILURE;
-  }
-  if (status == 2) {
-    fprintf(stderr, "%s: missing argument to %s\n", program, params[i - 1]);
-    return EXIT_FAILURE;
-  }
-  if (status == 3) {
-    fprintf(stderr, "%s: unknown argument to %s: %s\n", program, params[i - 1], params[i]);
-    return EXIT_FAILURE;
-  }
+int do_file(char *path, char *params[], int *actions, struct stat attr) {
 
   /* filtering */
-  if (s_nouser && do_nouser(attr) != EXIT_SUCCESS) {
+  if (actions[S_NOUSER] && do_nouser(attr) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
-  if (s_user && do_user(params[s_user], attr) != EXIT_SUCCESS) {
+
+  if (actions[S_USER] && do_user(params[actions[S_USER]], attr) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
-  if (s_name && do_name(path, params[s_name]) != EXIT_SUCCESS) {
+
+  if (actions[S_NAME] && do_name(path, params[actions[S_NAME]]) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
-  if (s_path && do_path(path, params[s_path]) != EXIT_SUCCESS) {
+
+  if (actions[S_PATH] && do_path(path, params[actions[S_PATH]]) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
-  if (s_type && do_type(params[s_type][0], attr) != EXIT_SUCCESS) {
+
+  if (actions[S_TYPE] && do_type(params[actions[S_TYPE]][0], attr) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
 
   /* printing */
-  if ((!s_ls || s_print) && do_print(path) != EXIT_SUCCESS) {
+  if ((!actions[S_LS] || actions[S_PRINT]) && do_print(path) != EXIT_SUCCESS) {
     return EXIT_FAILURE;
   }
-  if (s_ls && do_ls(path, attr) != EXIT_SUCCESS) {
+
+  if (actions[S_LS] && do_ls(path, attr) != EXIT_SUCCESS) {
     return EXIT_FAILURE;
   }
 
@@ -322,7 +253,7 @@ int do_file(char *path, char *params[], struct stat attr) {
 int do_print(char *path) {
 
   if (printf("%s\n", path) < 0) {
-    fprintf(stderr, "%s: printf() failed\n", program);
+    fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
     return EXIT_FAILURE;
   }
 
@@ -342,11 +273,12 @@ int do_print(char *path) {
  */
 int do_ls(char *path, struct stat attr) {
 
-  /* casts are taken from the stat man */
+  /* casts are taken from the stat manual */
+  /* blame clang-format for the formatting */
   if (printf("%ld    %lld %s   %ld %s   %s   %s\n", (long)attr.st_ino,
              (long long)attr.st_blocks / 2, do_get_perms(attr), (long)attr.st_nlink,
              do_get_mtime(attr), path, do_get_symlink(path, attr)) < 0) {
-    fprintf(stderr, "%s: printf() failed\n", program);
+    fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
     return EXIT_FAILURE;
   }
 
@@ -364,6 +296,10 @@ int do_ls(char *path, struct stat attr) {
  */
 int do_type(char type, struct stat attr) {
 
+  /*
+   * we are comparing chars
+   * there is no need for strcmp
+   */
   if (type == do_get_type(attr)) {
     return EXIT_SUCCESS;
   }
@@ -423,6 +359,112 @@ int do_path(char *path, char *pattern) {
  */
 int do_name(char *path, char *pattern) {
   /* compare filename with pattern */
+  return EXIT_SUCCESS;
+}
+
+int do_validate_params(char *params[], int param_start, int *actions) {
+  int i = 0; /* the counter variable is used outside of the loop */
+
+  /*
+   * 0 = ok or nothing to check
+   * 1 = unknown predicate
+   * 2 = missing argument for predicate
+   * 3 = unknown argument for predicate
+   */
+  int status = 0;
+
+  /* parameters can start from params[1] */
+  for (i = param_start; params[i]; i++) {
+
+    /* parameters consisting of a single part */
+    if (strcmp(params[i], "-print") == 0) {
+      actions[S_PRINT] = 1;
+      continue;
+    }
+    if (strcmp(params[i], "-ls") == 0) {
+      actions[S_LS] = 1;
+      continue;
+    }
+    if (strcmp(params[i], "-nouser") == 0) {
+      actions[S_NOUSER] = 1;
+      continue;
+    }
+
+    /* parameters expecting a non-empty second part */
+    if (strcmp(params[i], "-user") == 0) {
+      if (params[++i]) {
+        actions[S_USER] = i; /* save the argument number of the second part,
+                       so that it can be accessed with params[s_user] */
+        continue;
+      } else {
+        status = 2;
+        break; /* the second part is missing */
+      }
+    }
+    if (strcmp(params[i], "-name") == 0) {
+      if (params[++i]) {
+        actions[S_NAME] = i;
+        continue;
+      } else {
+        status = 2;
+        break; /* the second part is missing */
+      }
+    }
+    if (strcmp(params[i], "-path") == 0) {
+      if (params[++i]) {
+        actions[S_PATH] = i;
+        continue;
+      } else {
+        status = 2;
+        break; /* the second part is missing */
+      }
+    }
+
+    /* a parameter expecting a restricted second part */
+    if (strcmp(params[i], "-type") == 0) {
+      if (params[++i]) {
+        if ((strcmp(params[i], "b") == 0) || (strcmp(params[i], "c") == 0) ||
+            (strcmp(params[i], "d") == 0) || (strcmp(params[i], "p") == 0) ||
+            (strcmp(params[i], "f") == 0) || (strcmp(params[i], "l") == 0) ||
+            (strcmp(params[i], "s") == 0)) {
+          actions[S_TYPE] = i;
+          continue;
+        } else {
+          status = 3;
+          break; /* the second part is unknown */
+        }
+      } else {
+        status = 2;
+        break; /* the second part is missing */
+      }
+    }
+
+    status = 1; /* no match found */
+    break;      /* do not increment the counter,
+                   so that we can access the current state in error handling */
+  }
+
+  /* error handling */
+  if (status != 0 && param_start < 2) {
+    /*
+     * fail silently if the check didn't pass on the first parameter
+     * which is most likely a path
+     */
+    return EXIT_FAILURE;
+  }
+  if (status == 1) {
+      fprintf(stderr, "%s: unknown predicate: %s\n", program, params[i]);
+    return EXIT_FAILURE;
+  }
+  if (status == 2) {
+      fprintf(stderr, "%s: missing argument to %s\n", program, params[i - 1]);
+    return EXIT_FAILURE;
+  }
+  if (status == 3) {
+      fprintf(stderr, "%s: unknown argument to %s: %s\n", program, params[i - 1], params[i]);
+    return EXIT_FAILURE;
+  }
+
   return EXIT_SUCCESS;
 }
 
