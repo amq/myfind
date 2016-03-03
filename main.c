@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <time.h>
 #include <unistd.h>
+#include <libgen.h>
 
 /*
  * why not "const char *path"?
@@ -111,7 +112,7 @@ void print_usage(void) {
              "-ls                   print entry details\n"
              "-nouser               entries not belonging to a user\n"
              "-path                 entry paths (incl. names) matching a pattern\n") < 0) {
-    fprintf(stderr, "%s: printf() failed\n", program);
+    fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
   }
 }
 
@@ -142,7 +143,8 @@ int do_dir(char *path, char *params[], struct stat attr) {
     }
 
     /* allocate memory for the full entry path */
-    char *full_path = malloc(sizeof(char) * (strlen(path) + strlen(entry->d_name) + 2));
+    size_t length = strlen(path) + strlen(entry->d_name) + 2;
+    char *full_path = malloc(sizeof(char) * length);
 
     if (!full_path) {
       fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
@@ -150,7 +152,7 @@ int do_dir(char *path, char *params[], struct stat attr) {
     }
 
     /* concat the path with the entry name */
-    sprintf(full_path, "%s/%s", path, entry->d_name);
+    snprintf(full_path, length, "%s/%s", path, entry->d_name);
 
     /* process the entry */
     if (lstat(full_path, &attr) == 0) {
@@ -187,8 +189,8 @@ int do_dir(char *path, char *params[], struct stat attr) {
  * @retval EXIT_FAILURE
  */
 int do_file(char *path, char *params[], struct stat attr) {
+  static int checked, s_print, s_ls, s_nouser, s_user, s_name, s_path, s_type;
   int i = 0; /* the counter variable is used outside of the loop */
-  int s_print = 0, s_ls = 0, s_nouser = 0, s_user = 0, s_name = 0, s_path = 0, s_type = 0;
 
   /*
    * 0 = ok or nothing to check
@@ -198,76 +200,81 @@ int do_file(char *path, char *params[], struct stat attr) {
    */
   int status = 0;
 
-  /* parameters start from params[2] */
-  for (i = 2; params[i]; i++) {
+  /* the matching should be performed just once */
+  if (!checked) {
+    /* parameters start from params[2] */
+    for (i = 2; params[i]; i++) {
 
-    /* parameters consisting of a single part */
-    if (strcmp(params[i], "-print") == 0) {
-      s_print = 1;
-      continue;
-    }
-    if (strcmp(params[i], "-ls") == 0) {
-      s_ls = 1;
-      continue;
-    }
-    if (strcmp(params[i], "-nouser") == 0) {
-      s_nouser = 1;
-      continue;
-    }
+      /* parameters consisting of a single part */
+      if (strcmp(params[i], "-print") == 0) {
+        s_print = 1;
+        continue;
+      }
+      if (strcmp(params[i], "-ls") == 0) {
+        s_ls = 1;
+        continue;
+      }
+      if (strcmp(params[i], "-nouser") == 0) {
+        s_nouser = 1;
+        continue;
+      }
 
-    /* parameters expecting a non-empty second part */
-    if (strcmp(params[i], "-user") == 0) {
-      if (params[++i]) {
-        s_user = i; /* save the argument number of the second part,
-                       so that it can be accessed with params[s_user] */
-        continue;
-      } else {
-        status = 2;
-        break; /* the second part is missing */
-      }
-    }
-    if (strcmp(params[i], "-name") == 0) {
-      if (params[++i]) {
-        s_name = i;
-        continue;
-      } else {
-        status = 2;
-        break; /* the second part is missing */
-      }
-    }
-    if (strcmp(params[i], "-path") == 0) {
-      if (params[++i]) {
-        s_path = i;
-        continue;
-      } else {
-        status = 2;
-        break; /* the second part is missing */
-      }
-    }
-
-    /* a parameter expecting a restricted second part */
-    if (strcmp(params[i], "-type") == 0) {
-      if (params[++i]) {
-        if ((strcmp(params[i], "b") == 0) || (strcmp(params[i], "c") == 0) ||
-            (strcmp(params[i], "d") == 0) || (strcmp(params[i], "p") == 0) ||
-            (strcmp(params[i], "f") == 0) || (strcmp(params[i], "l") == 0) ||
-            (strcmp(params[i], "s") == 0)) {
-          s_type = i;
+      /* parameters expecting a non-empty second part */
+      if (strcmp(params[i], "-user") == 0) {
+        if (params[++i]) {
+          s_user = i; /* save the argument number of the second part,
+                         so that it can be accessed with params[s_user] */
           continue;
         } else {
-          status = 3;
-          break; /* the second part is unknown */
+          status = 2;
+          break; /* the second part is missing */
         }
-      } else {
-        status = 2;
-        break; /* the second part is missing */
       }
-    }
+      if (strcmp(params[i], "-name") == 0) {
+        if (params[++i]) {
+          s_name = i;
+          continue;
+        } else {
+          status = 2;
+          break; /* the second part is missing */
+        }
+      }
+      if (strcmp(params[i], "-path") == 0) {
+        if (params[++i]) {
+          s_path = i;
+          continue;
+        } else {
+          status = 2;
+          break; /* the second part is missing */
+        }
+      }
 
-    status = 1; /* no match found */
-    break;      /* do not increment the counter,
-                   so that we can access the current state in error handling */
+      /* a parameter expecting a restricted second part */
+      if (strcmp(params[i], "-type") == 0) {
+        if (params[++i]) {
+          if ((strcmp(params[i], "b") == 0) || (strcmp(params[i], "c") == 0) ||
+              (strcmp(params[i], "d") == 0) || (strcmp(params[i], "p") == 0) ||
+              (strcmp(params[i], "f") == 0) || (strcmp(params[i], "l") == 0) ||
+              (strcmp(params[i], "s") == 0)) {
+            s_type = i;
+            continue;
+          } else {
+            status = 3;
+            break; /* the second part is unknown */
+          }
+        } else {
+          status = 2;
+          break; /* the second part is missing */
+        }
+      }
+
+      status = 1; /* no match found */
+      break;      /* do not increment the counter,
+                     so that we can access the current state in error handling */
+    }
   }
+
+  checked = 1;
 
   /* error handling */
   if (status == 1) {
@@ -322,7 +329,7 @@ int do_file(char *path, char *params[], struct stat attr) {
 int do_print(char *path) {
 
   if (printf("%s\n", path) < 0) {
-    fprintf(stderr, "%s: printf() failed\n", program);
+    fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
     return EXIT_FAILURE;
   }
 
@@ -335,18 +342,30 @@ int do_print(char *path) {
  * @param path the path to be processed
  * @param attr the entry attributes from lstat
  *
- * @todo user, group, size, year instead of time when old, arrow for symlink
+ * @todo user- and groupname instead of uid/gid
  *
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
 int do_ls(char *path, struct stat attr) {
+  long inode = attr.st_ino;
+  long long blocks = attr.st_blocks / 2;
+  char *perms = do_get_perms(attr);
+  long links = attr.st_nlink;
+  long uid = attr.st_uid;
+  long gid = attr.st_gid;
+  long long size = attr.st_size;
+  char *mtime = do_get_mtime(attr);
+  char *symlink = do_get_symlink(path, attr);
+  char *arrow = "";
 
-  /* casts are taken from the stat man */
-  if (printf("%ld    %lld %s   %ld %s   %s   %s\n", (long)attr.st_ino,
-             (long long)attr.st_blocks / 2, do_get_perms(attr), (long)attr.st_nlink,
-             do_get_mtime(attr), path, do_get_symlink(path, attr)) < 0) {
-    fprintf(stderr, "%s: printf() failed\n", program);
+  if (strlen(symlink) > 0) {
+    arrow = " -> ";
+  }
+
+  if (printf("%-8ld %2lld %11s %2ld %-8ld %-8ld %8lld %12s %s%s%s\n", inode, blocks, perms, links,
+             uid, gid, size, mtime, path, arrow, symlink) < 0) {
+    fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
     return EXIT_FAILURE;
   }
 
@@ -364,6 +383,7 @@ int do_ls(char *path, struct stat attr) {
  */
 int do_type(char type, struct stat attr) {
 
+  /* comparing two chars */
   if (type == do_get_type(attr)) {
     return EXIT_SUCCESS;
   }
@@ -380,7 +400,9 @@ int do_type(char type, struct stat attr) {
  * @retval EXIT_FAILURE
  */
 int do_nouser(struct stat attr) {
-  /* check if file has no user */
+
+  /* amanf */
+
   return EXIT_SUCCESS;
 }
 
@@ -394,7 +416,10 @@ int do_nouser(struct stat attr) {
  * @retval EXIT_FAILURE
  */
 int do_user(char *user, struct stat attr) {
-  /* compare username/uid from input with the file owner */
+
+  /* amanf */
+  /* see also do_get_username */
+
   return EXIT_SUCCESS;
 }
 
@@ -408,7 +433,9 @@ int do_user(char *user, struct stat attr) {
  * @retval EXIT_FAILURE
  */
 int do_path(char *path, char *pattern) {
-  /* compare path including filename with pattern */
+
+  /* khalikov */
+
   return EXIT_SUCCESS;
 }
 
@@ -422,7 +449,10 @@ int do_path(char *path, char *pattern) {
  * @retval EXIT_FAILURE
  */
 int do_name(char *path, char *pattern) {
-  /* compare filename with pattern */
+  char *filename = basename(path);
+
+  /* khalikov */
+
   return EXIT_SUCCESS;
 }
 
@@ -434,7 +464,7 @@ int do_name(char *path, char *pattern) {
  * @returns the entry permissions as a string
  */
 char *do_get_perms(struct stat attr) {
-  static char perms[11] = {'-'};
+  static char perms[12];
   char type = do_get_type(attr);
 
   /*
@@ -444,13 +474,18 @@ char *do_get_perms(struct stat attr) {
   perms[0] = (char)(type == 'f' ? '-' : type);
   perms[1] = (char)(attr.st_mode & S_IRUSR ? 'r' : '-');
   perms[2] = (char)(attr.st_mode & S_IWUSR ? 'w' : '-');
-  perms[3] = (char)(attr.st_mode & S_IXUSR ? 'x' : '-');
+  perms[3] = (char)(attr.st_mode & S_ISUID ? (attr.st_mode & S_IXUSR ? 's' : 'S')
+                                           : (attr.st_mode & S_IXUSR ? 'x' : '-'));
   perms[4] = (char)(attr.st_mode & S_IRGRP ? 'r' : '-');
   perms[5] = (char)(attr.st_mode & S_IWGRP ? 'w' : '-');
-  perms[6] = (char)(attr.st_mode & S_IXGRP ? 'x' : '-');
+  perms[6] = (char)(attr.st_mode & S_ISGID ? (attr.st_mode & S_IXGRP ? 's' : 'S')
+                                           : (attr.st_mode & S_IXGRP ? 'x' : '-'));
   perms[7] = (char)(attr.st_mode & S_IROTH ? 'r' : '-');
   perms[8] = (char)(attr.st_mode & S_IWOTH ? 'w' : '-');
-  perms[9] = (char)(attr.st_mode & S_IXOTH ? 'x' : '-');
+  perms[9] = (char)(attr.st_mode & S_ISVTX ? (attr.st_mode & S_IXOTH ? 't' : 'T')
+                                           : (attr.st_mode & S_IXOTH ? 'x' : '-'));
+  perms[10] = ' ';
+  perms[11] = '\0';
 
   return perms;
 }
@@ -497,11 +532,13 @@ char do_get_type(struct stat attr) {
  * @returns the entry modification time as a string
  */
 char *do_get_mtime(struct stat attr) {
-  static char mtime[13] = {' '};
+  static char mtime[13];
 
   if (strftime(mtime, sizeof(mtime), "%b %e %H:%M", localtime(&attr.st_mtime)) == 0) {
     fprintf(stderr, "%s: strftime() failed\n", program);
   }
+
+  mtime[13] = '\0';
 
   return mtime;
 }
@@ -517,7 +554,7 @@ char *do_get_mtime(struct stat attr) {
 char *do_get_symlink(char *path, struct stat attr) {
 
   if (S_ISLNK(attr.st_mode)) {
-    char *symlink = malloc(sizeof(char) * (attr.st_size) + 2);
+    char *symlink = malloc(sizeof(char) * (attr.st_size + 2));
 
     if (!symlink) {
       fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
@@ -545,7 +582,9 @@ char *do_get_symlink(char *path, struct stat attr) {
  * @returns the username converted from uid as a string
  */
 char *do_get_username(char *uid, struct stat attr) {
-  /* convert uid to username */
   char *username = "";
+
+  /* amanf */
+
   return username;
 }
