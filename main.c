@@ -357,21 +357,25 @@ int do_ls(char *path, struct stat attr) {
   long long size = attr.st_size;
   char *mtime = do_get_mtime(attr);
   char *symlink = do_get_symlink(path, attr);
+  int symlink_present = 0;
   char *arrow = "";
 
   if (strlen(symlink) > 0) {
+    symlink_present = 1;
     arrow = " -> ";
   }
 
   if (printf("%-8ld %2lld %11s %2ld %-8ld %-8ld %8lld %12s %s%s%s\n", inode, blocks, perms, links,
              uid, gid, size, mtime, path, arrow, symlink) < 0) {
-    free(symlink);
+    /* every malloc() should have a free(), even if outside of its function */
+    if (symlink_present) {
+      free(symlink);
+    }
     fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
     return EXIT_FAILURE;
   }
 
-  /* every malloc() must have a free(), even if outside of its function */
-  if (strlen(symlink) > 0) {
+  if (symlink_present) {
     free(symlink);
   }
 
@@ -458,6 +462,12 @@ int do_name(char *path, char *pattern) {
   char *filename = basename(path);
 
   /* khalikov */
+
+  /*
+   * we are not calling free() on filename. From the basename manual:
+   * both dirname() and basename() return pointers to null-terminated strings,
+   * do not pass these pointers to free()
+   */
 
   return EXIT_SUCCESS;
 }
