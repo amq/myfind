@@ -51,7 +51,7 @@ char *do_get_username(char *uid, struct stat attr);
 char *program;
 
 /**
- * @brief calls do_file on argv[1] and additionally do_dir if a directory
+ * @brief calls do_file on argv[1] and additionally do_dir, if a directory
  *
  * @param argc number of arguments
  * @param argv the arguments
@@ -337,7 +337,7 @@ int do_print(char *path) {
 }
 
 /*
- * @brief prints the path with details
+ * @brief prints out the path with details
  *
  * @param path the path to be processed
  * @param attr the entry attributes from lstat
@@ -365,8 +365,14 @@ int do_ls(char *path, struct stat attr) {
 
   if (printf("%-8ld %2lld %11s %2ld %-8ld %-8ld %8lld %12s %s%s%s\n", inode, blocks, perms, links,
              uid, gid, size, mtime, path, arrow, symlink) < 0) {
+    free(symlink);
     fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
     return EXIT_FAILURE;
+  }
+
+  /* every malloc() must have a free(), even if outside of its function */
+  if (strlen(symlink) > 0) {
+    free(symlink);
   }
 
   return EXIT_SUCCESS;
@@ -407,7 +413,7 @@ int do_nouser(struct stat attr) {
 }
 
 /*
- * @brief returns EXIT_SUCCESS when the user(-name/-id) matches the entry attribute
+ * @brief returns EXIT_SUCCESS if the user(-name/-id) matches the entry attribute
  *
  * @param user the username or uid to match against
  * @param attr the entry attributes from lstat
@@ -424,7 +430,7 @@ int do_user(char *user, struct stat attr) {
 }
 
 /*
- * @brief returns EXIT_SUCCESS when the path matches the pattern
+ * @brief returns EXIT_SUCCESS if the path matches the pattern
  *
  * @param path the entry path
  * @param pattern the pattern to match against
@@ -440,7 +446,7 @@ int do_path(char *path, char *pattern) {
 }
 
 /*
- * @brief returns EXIT_SUCCESS when the filename matches the pattern
+ * @brief returns EXIT_SUCCESS if the filename matches the pattern
  *
  * @param path the entry path
  * @param pattern the pattern to match against
@@ -496,6 +502,14 @@ char *do_get_perms(struct stat attr) {
  * @param attr the entry attributes from lstat
  *
  * @returns the entry type as a char
+ * @retval b block special file
+ * @retval c character special file
+ * @retval d directory
+ * @retval p fifo (named pipe)
+ * @retval f regular file
+ * @retval l symbolic link
+ * @retval s socket
+ * @retval ? some other file type
  */
 char do_get_type(struct stat attr) {
 
@@ -562,7 +576,9 @@ char *do_get_symlink(char *path, struct stat attr) {
     }
 
     if (readlink(path, symlink, sizeof(symlink) - 1) == -1) {
+      free(symlink);
       fprintf(stderr, "%s: readlink(%s): %s\n", program, path, strerror(errno));
+      return "";
     } else {
       symlink[attr.st_size] = '\0';
     }
