@@ -8,26 +8,6 @@
 #include <unistd.h>
 #include <libgen.h>
 
-/*
- * why not "const char *path"?
- * because we are always passing the path by value
- *
- * why not "const char *params[]"?
- * the parameters argc and argv and the strings
- * pointed to by the argv array shall be modifiable
- * by the program, and retain their last-stored values
- * between program startup and program termination
- * C11 standard draft N1570, §5.1.2.2.1/2
- *
- * why do we need the attr everywhere?
- * it lets us do the lstat system call exactly once
- * per entry without repeating it in subfunctions
- *
- * why aren't all variables declared in the beginning of the function?
- * there is no point in declaring variables before we are sure we need them;
- * for example, it is a waste to declare actions before checking argc
- */
-
 typedef struct actions_t {
   int print;
   int ls;
@@ -39,10 +19,10 @@ typedef struct actions_t {
 } actions_t;
 
 void do_print_usage(void);
-int do_parse_params(char *params[], actions_t *actions);
+int do_parse_params(char *argv[], actions_t *actions);
 
-int do_dir(char *path, actions_t *actions, struct stat attr);
-int do_file(char *path, actions_t *actions, struct stat attr);
+int do_dir(char *path, actions_t actions, struct stat attr);
+int do_file(char *path, actions_t actions, struct stat attr);
 
 int do_print(char *path);
 int do_ls(char *path, struct stat attr);
@@ -75,6 +55,7 @@ char *program;
  * @retval EXIT_FAILURE
  */
 int main(int argc, char *argv[]) {
+  actions_t actions;
   struct stat attr;
 
   /*
@@ -86,11 +67,7 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  /* define and initialize to 0 */
-  actions_t *actions = calloc(1, sizeof(*actions));
-
-  if (do_parse_params(argv, actions) != EXIT_SUCCESS) {
-    free(actions);
+  if (do_parse_params(argv, &actions) != EXIT_SUCCESS) {
     return EXIT_FAILURE;
   }
 
@@ -110,11 +87,8 @@ int main(int argc, char *argv[]) {
     }
   } else {
     fprintf(stderr, "%s: lstat(%s): %s\n", program, argv[1], strerror(errno));
-    free(actions);
     return EXIT_FAILURE;
   }
-
-  free(actions);
 
   return EXIT_SUCCESS;
 }
@@ -149,8 +123,11 @@ void do_print_usage(void) {
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
-int do_parse_params(char *params[], actions_t *actions) {
+int do_parse_params(char *argv[], actions_t *actions) {
   int i = 0; /* the counter variable is used outside of the loop */
+
+  /* initialize actions with zeroes */
+  memset(actions, 0, sizeof(*actions));
 
   /*
    * 0 = ok or nothing to check
@@ -160,48 +137,45 @@ int do_parse_params(char *params[], actions_t *actions) {
    */
   int status = 0;
 
-  /*
-   * parameters start from params[2]
-   * the checked variable makes sure the matching is done just once
-   */
-  for (i = 2; params[i]; i++) {
+  /* parameters start from params[2] */
+  for (i = 2; argv[i]; i++) {
 
     /* parameters consisting of a single part */
-    if (strcmp(params[i], "-print") == 0) {
+    if (strcmp(argv[i], "-print") == 0) {
       actions->print = 1;
       continue;
     }
-    if (strcmp(params[i], "-ls") == 0) {
+    if (strcmp(argv[i], "-ls") == 0) {
       actions->ls = 1;
       continue;
     }
-    if (strcmp(params[i], "-nouser") == 0) {
+    if (strcmp(argv[i], "-nouser") == 0) {
       actions->nouser = 1;
       continue;
     }
 
     /* parameters expecting a non-empty second part */
-    if (strcmp(params[i], "-user") == 0) {
-      if (params[++i]) {
-        actions->user = params[i];
+    if (strcmp(argv[i], "-user") == 0) {
+      if (argv[++i]) {
+        actions->user = argv[i];
         continue;
       } else {
         status = 2;
         break; /* the second part is missing */
       }
     }
-    if (strcmp(params[i], "-name") == 0) {
-      if (params[++i]) {
-        actions->name = params[i];
+    if (strcmp(argv[i], "-name") == 0) {
+      if (argv[++i]) {
+        actions->name = argv[i];
         continue;
       } else {
         status = 2;
         break; /* the second part is missing */
       }
     }
-    if (strcmp(params[i], "-path") == 0) {
-      if (params[++i]) {
-        actions->path = params[i];
+    if (strcmp(argv[i], "-path") == 0) {
+      if (argv[++i]) {
+        actions->path = argv[i];
         continue;
       } else {
         status = 2;
@@ -210,13 +184,13 @@ int do_parse_params(char *params[], actions_t *actions) {
     }
 
     /* a parameter expecting a restricted second part */
-    if (strcmp(params[i], "-type") == 0) {
-      if (params[++i]) {
-        if ((strcmp(params[i], "b") == 0) || (strcmp(params[i], "c") == 0) ||
-            (strcmp(params[i], "d") == 0) || (strcmp(params[i], "p") == 0) ||
-            (strcmp(params[i], "f") == 0) || (strcmp(params[i], "l") == 0) ||
-            (strcmp(params[i], "s") == 0)) {
-          actions->type = params[i][0];
+    if (strcmp(argv[i], "-type") == 0) {
+      if (argv[++i]) {
+        if ((strcmp(argv[i], "b") == 0) || (strcmp(argv[i], "c") == 0) ||
+            (strcmp(argv[i], "d") == 0) || (strcmp(argv[i], "p") == 0) ||
+            (strcmp(argv[i], "f") == 0) || (strcmp(argv[i], "l") == 0) ||
+            (strcmp(argv[i], "s") == 0)) {
+          actions->type = argv[i][0];
           continue;
         } else {
           status = 3;
@@ -235,15 +209,15 @@ int do_parse_params(char *params[], actions_t *actions) {
 
   /* error handling */
   if (status == 1) {
-    fprintf(stderr, "%s: unknown predicate: %s\n", program, params[i]);
+    fprintf(stderr, "%s: unknown predicate: %s\n", program, argv[i]);
     return EXIT_FAILURE;
   }
   if (status == 2) {
-    fprintf(stderr, "%s: missing argument to %s\n", program, params[i - 1]);
+    fprintf(stderr, "%s: missing argument to %s\n", program, argv[i - 1]);
     return EXIT_FAILURE;
   }
   if (status == 3) {
-    fprintf(stderr, "%s: unknown argument to %s: %s\n", program, params[i - 1], params[i]);
+    fprintf(stderr, "%s: unknown argument to %s: %s\n", program, argv[i - 1], argv[i]);
     return EXIT_FAILURE;
   }
 
@@ -257,14 +231,13 @@ int do_parse_params(char *params[], actions_t *actions) {
  * @param actions the parsed parameters
  * @param attr the entry attributes from lstat
  *
- * @todo remove trailing slash from the path
- *
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
-int do_dir(char *path, actions_t *actions, struct stat attr) {
+int do_dir(char *path, actions_t actions, struct stat attr) {
   DIR *dir;
   struct dirent *entry;
+  size_t length;
 
   dir = opendir(path);
 
@@ -279,8 +252,14 @@ int do_dir(char *path, actions_t *actions, struct stat attr) {
       continue;
     }
 
+    /* avoid '//' in path if the input has a trailing slash */
+    length = strlen(path);
+    if (path[length - 1] == '/') {
+      path[length - 1] = '\0';
+    }
+
     /* allocate memory for the full entry path */
-    size_t length = strlen(path) + strlen(entry->d_name) + 2;
+    length = strlen(path) + strlen(entry->d_name) + 2;
     char *full_path = malloc(sizeof(char) * length);
 
     if (!full_path) {
@@ -326,30 +305,30 @@ int do_dir(char *path, actions_t *actions, struct stat attr) {
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
-int do_file(char *path, actions_t *actions, struct stat attr) {
+int do_file(char *path, actions_t actions, struct stat attr) {
 
   /* filtering */
-  if (actions->nouser && do_nouser(attr) != EXIT_SUCCESS) {
+  if (actions.nouser && do_nouser(attr) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
-  if (actions->user && do_user(actions->user, attr) != EXIT_SUCCESS) {
+  if (actions.user && do_user(actions.user, attr) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
-  if (actions->name && do_name(path, actions->name) != EXIT_SUCCESS) {
+  if (actions.name && do_name(path, actions.name) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
-  if (actions->path && do_path(path, actions->path) != EXIT_SUCCESS) {
+  if (actions.path && do_path(path, actions.path) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
-  if (actions->type && do_type(actions->type, attr) != EXIT_SUCCESS) {
+  if (actions.type && do_type(actions.type, attr) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
 
   /* printing */
-  if ((!actions->ls || actions->print) && do_print(path) != EXIT_SUCCESS) {
+  if ((!actions.ls || actions.print) && do_print(path) != EXIT_SUCCESS) {
     return EXIT_FAILURE;
   }
-  if (actions->ls && do_ls(path, attr) != EXIT_SUCCESS) {
+  if (actions.ls && do_ls(path, attr) != EXIT_SUCCESS) {
     return EXIT_FAILURE;
   }
 
