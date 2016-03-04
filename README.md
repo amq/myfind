@@ -1,1 +1,1 @@
-[![build](https://img.shields.io/travis/amq/Betriebssysteme-Beispiel-1.svg)](https://travis-ci.org/amq/Betriebssysteme-Beispiel-1) [![coverage](https://img.shields.io/codecov/c/github/amq/Betriebssysteme-Beispiel-1.svg)](https://codecov.io/github/amq/Betriebssysteme-Beispiel-1)
+[![build](https://img.shields.io/travis/amq/myfind.svg)](https://travis-ci.org/amq/myfind) [![coverage](https://img.shields.io/codecov/c/github/amq/myfind.svg)](https://codecov.io/github/amq/myfind)

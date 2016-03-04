@@ -25,13 +25,13 @@
  */
 
 typedef struct actions_t {
-    int print;
-    int ls;
-    int nouser;
-    char *type;
-    char *user;
-    char *path;
-    char *name;
+  int print;
+  int ls;
+  int nouser;
+  char type;
+  char *user;
+  char *path;
+  char *name;
 } actions_t;
 
 void do_print_usage(void);
@@ -135,7 +135,7 @@ void do_print_usage(void) {
 }
 
 /**
- * @brief populates the actions struct by parsing argv
+ * @brief parses params and populates the actions struct
  *
  * @param params the arguments from argv
  * @param params the struct to populate
@@ -210,7 +210,7 @@ int do_parse_params(char *params[], actions_t *actions) {
             (strcmp(params[i], "d") == 0) || (strcmp(params[i], "p") == 0) ||
             (strcmp(params[i], "f") == 0) || (strcmp(params[i], "l") == 0) ||
             (strcmp(params[i], "s") == 0)) {
-          actions->type = params[i];
+          actions->type = (char)params[i];
           continue;
         } else {
           status = 3;
@@ -248,7 +248,8 @@ int do_parse_params(char *params[], actions_t *actions) {
  * @brief calls do_file on each directory entry recursively
  *
  * @param path the path to be processed
- * @param params the arguments from argv
+ * @param actions the parsed parameters
+ * @param attr the entry attributes from lstat
  *
  * @todo remove trailing slash from the path
  *
@@ -310,10 +311,11 @@ int do_dir(char *path, actions_t *actions, struct stat attr) {
 }
 
 /**
- * @brief calls a subfunction on the path based on a parameter match
+ * @brief calls subfunctions based on the actions struct
  *
  * @param path the path to be processed
- * @param params the arguments from argv
+ * @param actions the parsed parameters
+ * @param attr the entry attributes from lstat
  *
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
@@ -333,7 +335,7 @@ int do_file(char *path, actions_t *actions, struct stat attr) {
   if (actions->path && do_path(path, actions->path) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
-  if (actions->type && do_type(actions->type[0], attr) != EXIT_SUCCESS) {
+  if (actions->type && do_type(actions->type, attr) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
 
@@ -414,7 +416,7 @@ int do_ls(char *path, struct stat attr) {
 /*
  * @brief returns EXIT_SUCCESS when the type matches the entry attribute
  *
- * @param path the path to be processed
+ * @param type the type to match against
  * @param attr the entry attributes from lstat
  *
  * @retval EXIT_SUCCESS
@@ -493,7 +495,7 @@ int do_name(char *path, char *pattern) {
   /* khalikov */
 
   /*
-   * we are not calling free() on filename. From the basename manual:
+   * we are not calling free() on the filename; from the basename manual:
    * both dirname() and basename() return pointers to null-terminated strings,
    * do not pass these pointers to free()
    */
