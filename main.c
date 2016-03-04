@@ -22,6 +22,10 @@
  * why do we need the attr everywhere?
  * it lets us do the lstat system call exactly once
  * per entry without repeating it in subfunctions
+ *
+ * why aren't all variables declared in the beginning of the function?
+ * there is no point in declaring variables before we are sure we need them;
+ * for example, it is a waste to declare actions before checking argc
  */
 
 typedef struct actions_t {
@@ -85,12 +89,12 @@ int main(int argc, char *argv[]) {
   /* define and initialize to 0 */
   actions_t *actions = calloc(1, sizeof(*actions));
 
-  program = argv[0];
-
   if (do_parse_params(argv, actions) != EXIT_SUCCESS) {
     free(actions);
     return EXIT_FAILURE;
   }
+
+  program = argv[0];
 
   /*
    * try reading the attributes of the input
@@ -212,7 +216,7 @@ int do_parse_params(char *params[], actions_t *actions) {
             (strcmp(params[i], "d") == 0) || (strcmp(params[i], "p") == 0) ||
             (strcmp(params[i], "f") == 0) || (strcmp(params[i], "l") == 0) ||
             (strcmp(params[i], "s") == 0)) {
-          actions->type = (char)params[i];
+          actions->type = params[i][0];
           continue;
         } else {
           status = 3;
