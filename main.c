@@ -52,7 +52,7 @@ char *do_get_perms(struct stat attr);
 char do_get_type(struct stat attr);
 char *do_get_mtime(struct stat attr);
 char *do_get_symlink(char *path, struct stat attr);
-char *do_get_username(char *uid, struct stat attr);
+char *do_get_username(long uid, struct stat attr);
 
 /**
  * a global variable containing the program name
@@ -73,9 +73,6 @@ char *program;
 int main(int argc, char *argv[]) {
   struct stat attr;
 
-  /* define and initialize to 0 */
-  actions_t *actions = calloc(1, sizeof(*actions));
-
   /*
    * a minimum of 3 input parameters are required
    * myfind <file or directory> [ <aktion> ]
@@ -85,9 +82,13 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
+  /* define and initialize to 0 */
+  actions_t *actions = calloc(1, sizeof(*actions));
+
   program = argv[0];
 
   if (do_parse_params(argv, actions) != EXIT_SUCCESS) {
+    free(actions);
     return EXIT_FAILURE;
   }
 
@@ -105,6 +106,7 @@ int main(int argc, char *argv[]) {
     }
   } else {
     fprintf(stderr, "%s: lstat(%s): %s\n", program, argv[1], strerror(errno));
+    free(actions);
     return EXIT_FAILURE;
   }
 
@@ -638,7 +640,7 @@ char *do_get_symlink(char *path, struct stat attr) {
  *
  * @returns the username converted from uid as a string
  */
-char *do_get_username(char *uid, struct stat attr) {
+char *do_get_username(long uid, struct stat attr) {
   char *username = "";
 
   /* amanf */
