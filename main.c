@@ -24,10 +24,21 @@
  * per entry without repeating it in subfunctions
  */
 
-void print_usage(void);
+typedef struct actions_t {
+    int print;
+    int ls;
+    int nouser;
+    char *type;
+    char *user;
+    char *path;
+    char *name;
+} actions_t;
 
-int do_dir(char *path, char *params[], struct stat attr);
-int do_file(char *path, char *params[], struct stat attr);
+void do_print_usage(void);
+int do_parse_params(char *params[], actions_t *actions);
+
+int do_dir(char *path, actions_t *actions, struct stat attr);
+int do_file(char *path, actions_t *actions, struct stat attr);
 
 int do_print(char *path);
 int do_ls(char *path, struct stat attr);
@@ -61,17 +72,22 @@ char *program;
  */
 int main(int argc, char *argv[]) {
   struct stat attr;
+  actions_t *actions = calloc(1, sizeof(*actions));
 
   /*
    * a minimum of 3 input parameters are required
    * myfind <file or directory> [ <aktion> ]
    */
   if (argc < 3) {
-    print_usage();
+    do_print_usage();
     return EXIT_FAILURE;
   }
 
   program = argv[0];
+
+  if (do_parse_params(argv, actions) != EXIT_SUCCESS) {
+    return EXIT_FAILURE;
+  }
 
   /*
    * try reading the attributes of the input
@@ -79,13 +95,11 @@ int main(int argc, char *argv[]) {
    */
   if (lstat(argv[1], &attr) == 0) {
     /* process the input */
-    if (do_file(argv[1], argv, attr) != EXIT_SUCCESS) {
-      return EXIT_FAILURE; /* the input didn't pass the parameter check */
-    }
+    do_file(argv[1], actions, attr);
 
     /* if a directory, process its contents */
     if (S_ISDIR(attr.st_mode)) {
-      do_dir(argv[1], argv, attr);
+      do_dir(argv[1], actions, attr);
     }
   } else {
     fprintf(stderr, "%s: lstat(%s): %s\n", program, argv[1], strerror(errno));
@@ -102,7 +116,7 @@ int main(int argc, char *argv[]) {
  *
  * @retval void
  */
-void print_usage(void) {
+void do_print_usage(void) {
 
   if (printf("myfind <file or directory> [ <aktion> ]\n"
              "-user <name>|<uid>  entries belonging to a user\n"
@@ -125,7 +139,7 @@ void print_usage(void) {
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
-int do_dir(char *path, char *params[], struct stat attr) {
+int do_dir(char *path, actions_t *actions, struct stat attr) {
   DIR *dir;
   struct dirent *entry;
 
@@ -151,16 +165,21 @@ int do_dir(char *path, char *params[], struct stat attr) {
       return EXIT_FAILURE;
     }
 
+    /* avoid having '//' in a special case when the path is the root */
+    if (strcmp(path, "/") == 0) {
+      path = "";
+    }
+
     /* concat the path with the entry name */
     snprintf(full_path, length, "%s/%s", path, entry->d_name);
 
     /* process the entry */
     if (lstat(full_path, &attr) == 0) {
-      do_file(full_path, params, attr);
+      do_file(full_path, actions, attr);
 
       /* if a directory, call the function recursively */
       if (S_ISDIR(attr.st_mode)) {
-        do_dir(full_path, params, attr);
+        do_dir(full_path, actions, attr);
       }
     } else {
       fprintf(stderr, "%s: lstat(%s): %s\n", program, full_path, strerror(errno));
@@ -188,8 +207,37 @@ int do_dir(char *path, char *params[], struct stat attr) {
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
-int do_file(char *path, char *params[], struct stat attr) {
-  static int checked, s_print, s_ls, s_nouser, s_user, s_name, s_path, s_type;
+int do_file(char *path, actions_t *actions, struct stat attr) {
+
+  /* filtering */
+  if (actions->nouser && do_nouser(attr) != EXIT_SUCCESS) {
+    return EXIT_SUCCESS;
+  }
+  if (actions->user && do_user(actions->user, attr) != EXIT_SUCCESS) {
+    return EXIT_SUCCESS;
+  }
+  if (actions->name && do_name(path, actions->name) != EXIT_SUCCESS) {
+    return EXIT_SUCCESS;
+  }
+  if (actions->path && do_path(path, actions->path) != EXIT_SUCCESS) {
+    return EXIT_SUCCESS;
+  }
+  if (actions->type && do_type(actions->type[0], attr) != EXIT_SUCCESS) {
+    return EXIT_SUCCESS;
+  }
+
+  /* printing */
+  if ((!actions->ls || actions->print) && do_print(path) != EXIT_SUCCESS) {
+    return EXIT_FAILURE;
+  }
+  if (actions->ls && do_ls(path, attr) != EXIT_SUCCESS) {
+    return EXIT_FAILURE;
+  }
+
+  return EXIT_SUCCESS;
+}
+
+int do_parse_params(char *params[], actions_t *actions) {
   int i = 0; /* the counter variable is used outside of the loop */
 
   /*
@@ -204,27 +252,26 @@ int do_file(char *path, char *params[], struct stat attr) {
    * parameters start from params[2]
    * the checked variable makes sure the matching is done just once
    */
-  for (i = 2; !checked && params[i]; i++) {
+  for (i = 2; params[i]; i++) {
 
     /* parameters consisting of a single part */
     if (strcmp(params[i], "-print") == 0) {
-      s_print = 1;
+      actions->print = 1;
       continue;
     }
     if (strcmp(params[i], "-ls") == 0) {
-      s_ls = 1;
+      actions->ls = 1;
       continue;
     }
     if (strcmp(params[i], "-nouser") == 0) {
-      s_nouser = 1;
+      actions->nouser = 1;
       continue;
     }
 
     /* parameters expecting a non-empty second part */
     if (strcmp(params[i], "-user") == 0) {
       if (params[++i]) {
-        s_user = i; /* save the argument number of the second part,
-                       so that it can be accessed with params[s_user] */
+        actions->user = params[i];
         continue;
       } else {
         status = 2;
@@ -233,7 +280,7 @@ int do_file(char *path, char *params[], struct stat attr) {
     }
     if (strcmp(params[i], "-name") == 0) {
       if (params[++i]) {
-        s_name = i;
+        actions->name = params[i];
         continue;
       } else {
         status = 2;
@@ -242,7 +289,7 @@ int do_file(char *path, char *params[], struct stat attr) {
     }
     if (strcmp(params[i], "-path") == 0) {
       if (params[++i]) {
-        s_path = i;
+        actions->path = params[i];
         continue;
       } else {
         status = 2;
@@ -257,7 +304,7 @@ int do_file(char *path, char *params[], struct stat attr) {
             (strcmp(params[i], "d") == 0) || (strcmp(params[i], "p") == 0) ||
             (strcmp(params[i], "f") == 0) || (strcmp(params[i], "l") == 0) ||
             (strcmp(params[i], "s") == 0)) {
-          s_type = i;
+          actions->type = params[i];
           continue;
         } else {
           status = 3;
@@ -274,8 +321,6 @@ int do_file(char *path, char *params[], struct stat attr) {
                    so that we can access the current state in error handling */
   }
 
-  checked = 1;
-
   /* error handling */
   if (status == 1) {
     fprintf(stderr, "%s: unknown predicate: %s\n", program, params[i]);
@@ -287,31 +332,6 @@ int do_file(char *path, char *params[], struct stat attr) {
   }
   if (status == 3) {
     fprintf(stderr, "%s: unknown argument to %s: %s\n", program, params[i - 1], params[i]);
-    return EXIT_FAILURE;
-  }
-
-  /* filtering */
-  if (s_nouser && do_nouser(attr) != EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }
-  if (s_user && do_user(params[s_user], attr) != EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }
-  if (s_name && do_name(path, params[s_name]) != EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }
-  if (s_path && do_path(path, params[s_path]) != EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }
-  if (s_type && do_type(params[s_type][0], attr) != EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }
-
-  /* printing */
-  if ((!s_ls || s_print) && do_print(path) != EXIT_SUCCESS) {
-    return EXIT_FAILURE;
-  }
-  if (s_ls && do_ls(path, attr) != EXIT_SUCCESS) {
     return EXIT_FAILURE;
   }
 
@@ -367,11 +387,10 @@ int do_ls(char *path, struct stat attr) {
 
   if (printf("%-8ld %2lld %11s %2ld %-8ld %-8ld %8lld %12s %s%s%s\n", inode, blocks, perms, links,
              uid, gid, size, mtime, path, arrow, symlink) < 0) {
-    /* every malloc() should have a free(), even if outside of its function */
-    if (symlink_present) {
-      free(symlink);
-    }
     fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
+    if (symlink_present) {
+      free(symlink); /* every malloc() should have a free(), even if outside of its function */
+    }
     return EXIT_FAILURE;
   }
 
@@ -586,8 +605,8 @@ char *do_get_symlink(char *path, struct stat attr) {
     }
 
     if (readlink(path, symlink, sizeof(symlink) - 1) == -1) {
-      free(symlink);
       fprintf(stderr, "%s: readlink(%s): %s\n", program, path, strerror(errno));
+      free(symlink);
       return "";
     } else {
       symlink[attr.st_size] = '\0';
