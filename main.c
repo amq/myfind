@@ -72,6 +72,8 @@ char *program;
  */
 int main(int argc, char *argv[]) {
   struct stat attr;
+
+  /* define and initialize to 0 */
   actions_t *actions = calloc(1, sizeof(*actions));
 
   /*
@@ -106,6 +108,8 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
+  free(actions);
+
   return EXIT_SUCCESS;
 }
 
@@ -131,112 +135,14 @@ void do_print_usage(void) {
 }
 
 /**
- * @brief calls do_file on each directory entry recursively
+ * @brief populates the actions struct by parsing argv
  *
- * @param path the path to be processed
  * @param params the arguments from argv
+ * @param params the struct to populate
  *
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
-int do_dir(char *path, actions_t *actions, struct stat attr) {
-  DIR *dir;
-  struct dirent *entry;
-
-  dir = opendir(path);
-
-  if (!dir) {
-    fprintf(stderr, "%s: opendir(%s): %s\n", program, path, strerror(errno));
-    return EXIT_FAILURE; /* stops a function call, the program continues */
-  }
-
-  while ((entry = readdir(dir))) {
-    /* skip '.' and '..' */
-    if (strcmp(".", entry->d_name) == 0 || strcmp("..", entry->d_name) == 0) {
-      continue;
-    }
-
-    /* allocate memory for the full entry path */
-    size_t length = strlen(path) + strlen(entry->d_name) + 2;
-    char *full_path = malloc(sizeof(char) * length);
-
-    if (!full_path) {
-      fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
-      return EXIT_FAILURE;
-    }
-
-    /* avoid having '//' in a special case when the path is the root */
-    if (strcmp(path, "/") == 0) {
-      path = "";
-    }
-
-    /* concat the path with the entry name */
-    snprintf(full_path, length, "%s/%s", path, entry->d_name);
-
-    /* process the entry */
-    if (lstat(full_path, &attr) == 0) {
-      do_file(full_path, actions, attr);
-
-      /* if a directory, call the function recursively */
-      if (S_ISDIR(attr.st_mode)) {
-        do_dir(full_path, actions, attr);
-      }
-    } else {
-      fprintf(stderr, "%s: lstat(%s): %s\n", program, full_path, strerror(errno));
-      free(full_path);
-      return EXIT_FAILURE;
-    }
-
-    free(full_path);
-  }
-
-  if (closedir(dir) != 0) {
-    fprintf(stderr, "%s: closedir(%s): %s\n", program, path, strerror(errno));
-    return EXIT_FAILURE;
-  }
-
-  return EXIT_SUCCESS;
-}
-
-/**
- * @brief calls a subfunction on the path based on a parameter match
- *
- * @param path the path to be processed
- * @param params the arguments from argv
- *
- * @retval EXIT_SUCCESS
- * @retval EXIT_FAILURE
- */
-int do_file(char *path, actions_t *actions, struct stat attr) {
-
-  /* filtering */
-  if (actions->nouser && do_nouser(attr) != EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }
-  if (actions->user && do_user(actions->user, attr) != EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }
-  if (actions->name && do_name(path, actions->name) != EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }
-  if (actions->path && do_path(path, actions->path) != EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }
-  if (actions->type && do_type(actions->type[0], attr) != EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }
-
-  /* printing */
-  if ((!actions->ls || actions->print) && do_print(path) != EXIT_SUCCESS) {
-    return EXIT_FAILURE;
-  }
-  if (actions->ls && do_ls(path, attr) != EXIT_SUCCESS) {
-    return EXIT_FAILURE;
-  }
-
-  return EXIT_SUCCESS;
-}
-
 int do_parse_params(char *params[], actions_t *actions) {
   int i = 0; /* the counter variable is used outside of the loop */
 
@@ -332,6 +238,110 @@ int do_parse_params(char *params[], actions_t *actions) {
   }
   if (status == 3) {
     fprintf(stderr, "%s: unknown argument to %s: %s\n", program, params[i - 1], params[i]);
+    return EXIT_FAILURE;
+  }
+
+  return EXIT_SUCCESS;
+}
+
+/**
+ * @brief calls do_file on each directory entry recursively
+ *
+ * @param path the path to be processed
+ * @param params the arguments from argv
+ *
+ * @todo remove trailing slash from the path
+ *
+ * @retval EXIT_SUCCESS
+ * @retval EXIT_FAILURE
+ */
+int do_dir(char *path, actions_t *actions, struct stat attr) {
+  DIR *dir;
+  struct dirent *entry;
+
+  dir = opendir(path);
+
+  if (!dir) {
+    fprintf(stderr, "%s: opendir(%s): %s\n", program, path, strerror(errno));
+    return EXIT_FAILURE; /* stops a function call, the program continues */
+  }
+
+  while ((entry = readdir(dir))) {
+    /* skip '.' and '..' */
+    if (strcmp(".", entry->d_name) == 0 || strcmp("..", entry->d_name) == 0) {
+      continue;
+    }
+
+    /* allocate memory for the full entry path */
+    size_t length = strlen(path) + strlen(entry->d_name) + 2;
+    char *full_path = malloc(sizeof(char) * length);
+
+    if (!full_path) {
+      fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
+      return EXIT_FAILURE;
+    }
+
+    /* concat the path with the entry name */
+    snprintf(full_path, length, "%s/%s", path, entry->d_name);
+
+    /* process the entry */
+    if (lstat(full_path, &attr) == 0) {
+      do_file(full_path, actions, attr);
+
+      /* if a directory, call the function recursively */
+      if (S_ISDIR(attr.st_mode)) {
+        do_dir(full_path, actions, attr);
+      }
+    } else {
+      fprintf(stderr, "%s: lstat(%s): %s\n", program, full_path, strerror(errno));
+      free(full_path);
+      return EXIT_FAILURE;
+    }
+
+    free(full_path);
+  }
+
+  if (closedir(dir) != 0) {
+    fprintf(stderr, "%s: closedir(%s): %s\n", program, path, strerror(errno));
+    return EXIT_FAILURE;
+  }
+
+  return EXIT_SUCCESS;
+}
+
+/**
+ * @brief calls a subfunction on the path based on a parameter match
+ *
+ * @param path the path to be processed
+ * @param params the arguments from argv
+ *
+ * @retval EXIT_SUCCESS
+ * @retval EXIT_FAILURE
+ */
+int do_file(char *path, actions_t *actions, struct stat attr) {
+
+  /* filtering */
+  if (actions->nouser && do_nouser(attr) != EXIT_SUCCESS) {
+    return EXIT_SUCCESS;
+  }
+  if (actions->user && do_user(actions->user, attr) != EXIT_SUCCESS) {
+    return EXIT_SUCCESS;
+  }
+  if (actions->name && do_name(path, actions->name) != EXIT_SUCCESS) {
+    return EXIT_SUCCESS;
+  }
+  if (actions->path && do_path(path, actions->path) != EXIT_SUCCESS) {
+    return EXIT_SUCCESS;
+  }
+  if (actions->type && do_type(actions->type[0], attr) != EXIT_SUCCESS) {
+    return EXIT_SUCCESS;
+  }
+
+  /* printing */
+  if ((!actions->ls || actions->print) && do_print(path) != EXIT_SUCCESS) {
+    return EXIT_FAILURE;
+  }
+  if (actions->ls && do_ls(path, attr) != EXIT_SUCCESS) {
     return EXIT_FAILURE;
   }
 
