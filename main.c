@@ -7,6 +7,8 @@
 #include <time.h>
 #include <unistd.h>
 #include <libgen.h>
+#include <pwd.h>
+#include <grp.h>
 
 typedef struct actions_t {
   int print;
@@ -32,11 +34,12 @@ int do_user(char *user, struct stat attr);
 int do_path(char *path, char *pattern);
 int do_name(char *path, char *pattern);
 
-char *do_get_perms(struct stat attr);
 char do_get_type(struct stat attr);
+char *do_get_perms(struct stat attr);
 char *do_get_mtime(struct stat attr);
 char *do_get_symlink(char *path, struct stat attr);
-char *do_get_username(long uid, struct stat attr);
+char *do_get_user(struct stat attr);
+char *do_get_group(struct stat attr);
 
 /**
  * a global variable containing the program name
@@ -67,11 +70,11 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
+  program = argv[0];
+
   if (do_parse_params(argv, &actions) != EXIT_SUCCESS) {
     return EXIT_FAILURE;
   }
-
-  program = argv[0];
 
   /*
    * try reading the attributes of the input
@@ -126,7 +129,7 @@ void do_print_usage(void) {
 int do_parse_params(char *argv[], actions_t *actions) {
   int i = 0; /* the counter variable is used outside of the loop */
 
-  /* initialize actions with zeroes */
+  /* initialize the actions with zeroes */
   memset(actions, 0, sizeof(*actions));
 
   /*
@@ -137,7 +140,7 @@ int do_parse_params(char *argv[], actions_t *actions) {
    */
   int status = 0;
 
-  /* parameters start from params[2] */
+  /* parameters start from argv[2] */
   for (i = 2; argv[i]; i++) {
 
     /* parameters consisting of a single part */
@@ -268,7 +271,10 @@ int do_dir(char *path, actions_t actions, struct stat attr) {
     }
 
     /* concat the path with the entry name */
-    snprintf(full_path, length, "%s/%s", path, entry->d_name);
+    if (snprintf(full_path, length, "%s/%s", path, entry->d_name) < 0) {
+      fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
+      return EXIT_FAILURE;
+    }
 
     /* process the entry */
     if (lstat(full_path, &attr) == 0) {
@@ -359,8 +365,6 @@ int do_print(char *path) {
  * @param path the path to be processed
  * @param attr the entry attributes from lstat
  *
- * @todo user- and groupname instead of uid/gid
- *
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
@@ -369,8 +373,8 @@ int do_ls(char *path, struct stat attr) {
   long long blocks = attr.st_blocks / 2;
   char *perms = do_get_perms(attr);
   long links = attr.st_nlink;
-  long uid = attr.st_uid;
-  long gid = attr.st_gid;
+  char *user = do_get_user(attr);
+  char *group = do_get_group(attr);
   long long size = attr.st_size;
   char *mtime = do_get_mtime(attr);
   char *symlink = do_get_symlink(path, attr);
@@ -382,14 +386,19 @@ int do_ls(char *path, struct stat attr) {
     arrow = " -> ";
   }
 
-  if (printf("%-8ld %2lld %11s %2ld %-8ld %-8ld %8lld %12s %s%s%s\n", inode, blocks, perms, links,
-             uid, gid, size, mtime, path, arrow, symlink) < 0) {
+  if (printf("%-8ld %2lld %10s %3ld %-8s %-8s %8lld %12s %s%s%s\n", inode, blocks, perms, links,
+             user, group, size, mtime, path, arrow, symlink) < 0) {
     fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
+    free(user);
+    free(group);
     if (symlink_present) {
       free(symlink); /* every malloc() should have a free(), even if outside of its function */
     }
     return EXIT_FAILURE;
   }
+
+  free(user);
+  free(group);
 
   if (symlink_present) {
     free(symlink);
@@ -496,7 +505,7 @@ int do_name(char *path, char *pattern) {
  * @returns the entry permissions as a string
  */
 char *do_get_perms(struct stat attr) {
-  static char perms[12];
+  static char perms[11];
   char type = do_get_type(attr);
 
   /*
@@ -516,8 +525,7 @@ char *do_get_perms(struct stat attr) {
   perms[8] = (char)(attr.st_mode & S_IWOTH ? 'w' : '-');
   perms[9] = (char)(attr.st_mode & S_ISVTX ? (attr.st_mode & S_IXOTH ? 't' : 'T')
                                            : (attr.st_mode & S_IXOTH ? 'x' : '-'));
-  perms[10] = ' ';
-  perms[11] = '\0';
+  perms[10] = '\0';
 
   return perms;
 }
@@ -573,8 +581,17 @@ char do_get_type(struct stat attr) {
  */
 char *do_get_mtime(struct stat attr) {
   static char mtime[13];
+  char *format;
+  time_t now = time(NULL);
+  time_t six_months = 31556952 / 2;
 
-  if (strftime(mtime, sizeof(mtime), "%b %e %H:%M", localtime(&attr.st_mtime)) == 0) {
+  if ((now - six_months) < attr.st_mtime) {
+    format = "%b %e %H:%M"; /* recent */
+  } else {
+    format = "%b %e  %Y"; /* older than 6 months */
+  }
+
+  if (strftime(mtime, sizeof(mtime), format, localtime(&attr.st_mtime)) == 0) {
     fprintf(stderr, "%s: strftime() failed\n", program);
   }
 
@@ -584,7 +601,105 @@ char *do_get_mtime(struct stat attr) {
 }
 
 /*
- * @brief returns the entry symlink, if of type s
+ * @brief returns the username or uid, if user not present on the system
+ *
+ * @param attr the entry attributes from lstat
+ *
+ * @returns the username if getpwuid() worked, otherwise uid, as a string
+ */
+char *do_get_user(struct stat attr) {
+  char *user;
+  char *buffer;
+  struct passwd pwd;
+  struct passwd *result;
+  long sysconf_length;
+  size_t length;
+
+  sysconf_length = sysconf(_SC_GETPW_R_SIZE_MAX);
+
+  if (sysconf_length == -1) {
+    sysconf_length = 16384;
+  }
+
+  length = (size_t)sysconf_length;
+
+  buffer = malloc(length);
+
+  if (!buffer) {
+    fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
+    return "";
+  }
+
+  if (getpwuid_r(attr.st_uid, &pwd, buffer, length, &result) != 0) {
+    free(buffer);
+    fprintf(stderr, "%s: getpwuid_r(): %s\n", program, strerror(errno));
+    return "";
+  }
+
+  if (result) {
+    user = pwd.pw_name;
+  } else {
+    user = buffer;
+    if (snprintf(user, length, "%ld", (long)attr.st_uid) < 0) {
+      fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
+      return "";
+    }
+  }
+
+  return user;
+}
+
+/*
+ * @brief returns the groupname or gid, if group not present on the system
+ *
+ * @param attr the entry attributes from lstat
+ *
+ * @returns the groupname if getgrgid() worked, otherwise gid, as a string
+ */
+char *do_get_group(struct stat attr) {
+  char *group;
+  char *buffer;
+  struct group grp;
+  struct group *result;
+  long sysconf_length;
+  size_t length;
+
+  sysconf_length = sysconf(_SC_GETPW_R_SIZE_MAX);
+
+  if (sysconf_length == -1) {
+    sysconf_length = 16384;
+  }
+
+  length = (size_t)sysconf_length;
+
+  buffer = malloc(length);
+
+  if (!buffer) {
+    fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
+    return "";
+  }
+
+  if (getgrgid_r(attr.st_uid, &grp, buffer, length, &result) != 0) {
+    free(buffer);
+    fprintf(stderr, "%s: getpwuid_r(): %s\n", program, strerror(errno));
+    return "";
+  }
+
+  if (result) {
+    group = grp.gr_name;
+  } else {
+    group = buffer;
+    if (snprintf(group, length, "%ld", (long)attr.st_uid) < 0) {
+      fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
+      return "";
+    }
+  }
+
+  return group;
+}
+
+/*
+ * @brief returns the entry symlink, if entry of type s
  *
  * @param path the entry path
  * @param attr the entry attributes from lstat
@@ -613,20 +728,4 @@ char *do_get_symlink(char *path, struct stat attr) {
   }
 
   return "";
-}
-
-/*
- * @brief returns the username converted from uid
- *
- * @param uid the user id
- * @param attr the entry attributes from lstat
- *
- * @returns the username converted from uid as a string
- */
-char *do_get_username(long uid, struct stat attr) {
-  char *username = "";
-
-  /* amanf */
-
-  return username;
 }
