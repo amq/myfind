@@ -65,7 +65,6 @@ int main(int argc, char *argv[]) {
   /* honor the system locale */
   if (!setlocale(LC_ALL, "")) {
     fprintf(stderr, "%s: setlocale() failed\n", program);
-    return EXIT_FAILURE;
   }
 
   /*
@@ -613,62 +612,39 @@ char *do_get_mtime(struct stat attr) {
  * @returns the username if getpwuid() worked, otherwise uid, as a string
  */
 char *do_get_user(struct stat attr) {
-  char *user;
-  struct passwd pwd;
-  struct passwd *result;
+  struct passwd *pwd;
 
-  static size_t length = 0;
-  static char *buffer = NULL;
   static int cache_uid = -1;
   static char *cache_pw_name = NULL;
 
-  /* only allocate the buffer once */
-  if (!length) {
-    long sysconf_length = sysconf(_SC_GETPW_R_SIZE_MAX);
-
-    if (sysconf_length == -1) {
-      sysconf_length = 16384;
-    }
-
-    length = (size_t)sysconf_length;
-    buffer = calloc(length, 1);
-  }
-
-  if (!buffer) {
-    fprintf(stderr, "%s: calloc(): %s\n", program, strerror(errno));
-    return strdup("");
-  }
-
-  /* check the cache */
+  /*
+   * skip getpwuid if we have the record in cache
+   * this simple tweak makes the whole program 2x faster
+   */
   if (cache_uid == attr.st_uid) {
     return strdup(cache_pw_name);
   }
 
-  /* empty the cache */
-  cache_uid = -1;
-  free(cache_pw_name);
-  cache_pw_name = NULL;
+  pwd = getpwuid(attr.st_uid);
 
-  if (getpwuid_r(attr.st_uid, &pwd, buffer, length, &result) != 0) {
-    fprintf(stderr, "%s: getpwuid_r(): %s\n", program, strerror(errno));
-    return strdup("");
-  }
-
-  if (result) {
-    user = pwd.pw_name;
-  } else {
-    user = buffer;
-    if (snprintf(user, length, "%ld", (long)attr.st_uid) < 0) {
+  if (!pwd) {
+    /*
+     * the user is not found or getpwuid failed,
+     * return the uid as a string then;
+     * an unsigned int needs 10 chars
+     */
+    char user[11];
+    if (snprintf(user, 11, "%ld", (long)attr.st_uid) < 0) {
       fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
       return strdup("");
     }
+    return strdup(user);
   }
 
-  /* load the cache */
-  cache_uid = attr.st_uid;
-  cache_pw_name = strdup(user);
+  cache_uid = pwd->pw_uid;
+  cache_pw_name = pwd->pw_name;
 
-  return strdup(user);
+  return strdup(pwd->pw_name);
 }
 
 /*
@@ -679,62 +655,39 @@ char *do_get_user(struct stat attr) {
  * @returns the groupname if getgrgid() worked, otherwise gid, as a string
  */
 char *do_get_group(struct stat attr) {
-  char *group;
-  struct group grp;
-  struct group *result;
+  struct group *grp;
 
-  static size_t length = 0;
-  static char *buffer = NULL;
   static int cache_gid = -1;
   static char *cache_gr_name = NULL;
 
-  /* only allocate the buffer once */
-  if (!length) {
-    long sysconf_length = sysconf(_SC_GETPW_R_SIZE_MAX);
-
-    if (sysconf_length == -1) {
-      sysconf_length = 16384;
-    }
-
-    length = (size_t)sysconf_length;
-    buffer = calloc(length, 1);
-  }
-
-  if (!buffer) {
-    fprintf(stderr, "%s: calloc(): %s\n", program, strerror(errno));
-    return strdup("");
-  }
-
-  /* check the cache */
+  /*
+   * skip getgrgid if we have the record in cache
+   * this simple tweak makes the whole program 2x faster
+   */
   if (cache_gid == attr.st_gid) {
     return strdup(cache_gr_name);
   }
 
-  /* empty the cache */
-  cache_gid = -1;
-  free(cache_gr_name);
-  cache_gr_name = NULL;
+  grp = getgrgid(attr.st_gid);
 
-  if (getgrgid_r(attr.st_gid, &grp, buffer, length, &result) != 0) {
-    fprintf(stderr, "%s: getpwuid_r(): %s\n", program, strerror(errno));
-    return strdup("");
-  }
-
-  if (result) {
-    group = grp.gr_name;
-  } else {
-    group = buffer;
-    if (snprintf(group, length, "%ld", (long)attr.st_gid) < 0) {
+  if (!grp) {
+    /*
+     * the group is not found or getgrgid failed,
+     * return the gid as a string then;
+     * an unsigned int needs 10 chars
+     */
+    char group[11];
+    if (snprintf(group, 11, "%ld", (long)attr.st_gid) < 0) {
       fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
       return strdup("");
     }
+    return strdup(group);
   }
 
-  /* load the cache */
-  cache_gid = attr.st_gid;
-  cache_gr_name = strdup(group);
+  cache_gid = grp->gr_gid;
+  cache_gr_name = grp->gr_name;
 
-  return strdup(group);
+  return strdup(grp->gr_name);
 }
 
 /*
