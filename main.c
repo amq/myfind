@@ -4,6 +4,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <locale.h>
 #include <time.h>
 #include <unistd.h>
 #include <libgen.h>
@@ -60,6 +61,12 @@ char *program;
 int main(int argc, char *argv[]) {
   actions_t actions;
   struct stat attr;
+
+  /* honor the system locale */
+  if (!setlocale(LC_ALL, "")) {
+    fprintf(stderr, "%s: setlocale() failed\n", program);
+    return EXIT_FAILURE;
+  }
 
   /*
    * a minimum of 3 input parameters are required
@@ -370,7 +377,7 @@ int do_print(char *path) {
  */
 int do_ls(char *path, struct stat attr) {
   long inode = attr.st_ino;
-  long long blocks = attr.st_blocks / 2;
+  long long blocks = S_ISLNK(attr.st_mode) ? 0 : attr.st_blocks / 2;
   char *perms = do_get_perms(attr);
   long links = attr.st_nlink;
   char *user = do_get_user(attr);
@@ -378,30 +385,22 @@ int do_ls(char *path, struct stat attr) {
   long long size = attr.st_size;
   char *mtime = do_get_mtime(attr);
   char *symlink = do_get_symlink(path, attr);
-  int symlink_present = 0;
   char *arrow = "";
 
   if (strlen(symlink) > 0) {
-    symlink_present = 1;
     arrow = " -> ";
   }
 
-  if (printf("%-8ld %2lld %10s %3ld %-8s %-8s %8lld %12s %s%s%s\n", inode, blocks, perms, links,
+  if (printf("%6ld %4lld %10s %3ld %-8s %-8s %8lld %12s %s%s%s\n", inode, blocks, perms, links,
              user, group, size, mtime, path, arrow, symlink) < 0) {
     fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
     free(user);
     free(group);
-    if (symlink_present) {
-      free(symlink);
-    }
     return EXIT_FAILURE;
   }
 
   free(user);
   free(group);
-  if (symlink_present) {
-    free(symlink);
-  }
 
   return EXIT_SUCCESS;
 }
@@ -576,13 +575,20 @@ char do_get_type(struct stat attr) {
  *
  * @param attr the entry attributes from lstat
  *
+ * @todo make sure the output is always the same as of GNU find (timezone offset?)
+ *
  * @returns the entry modification time as a string
  */
 char *do_get_mtime(struct stat attr) {
-  static char mtime[13];
+  static char mtime[16];
   char *format;
   time_t now = time(NULL);
   time_t six_months = 31556952 / 2;
+  struct tm *local_mtime;
+
+  if (!(local_mtime = localtime(&attr.st_mtime))) {
+    fprintf(stderr, "%s: localtime(): %s\n", program, strerror(errno));
+  }
 
   if ((now - six_months) < attr.st_mtime) {
     format = "%b %e %H:%M"; /* recent */
@@ -590,11 +596,11 @@ char *do_get_mtime(struct stat attr) {
     format = "%b %e  %Y"; /* older than 6 months */
   }
 
-  if (strftime(mtime, sizeof(mtime), format, localtime(&attr.st_mtime)) == 0) {
-    fprintf(stderr, "%s: strftime() failed\n", program);
+  if (strftime(mtime, sizeof(mtime), format, local_mtime) == 0) {
+    fprintf(stderr, "%s: strftime(): %s\n", program, strerror(errno));
   }
 
-  mtime[12] = '\0';
+  mtime[15] = '\0';
 
   return mtime;
 }
@@ -629,12 +635,12 @@ char *do_get_user(struct stat attr) {
   }
 
   if (!buffer) {
-    fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
-    return "";
+    fprintf(stderr, "%s: calloc(): %s\n", program, strerror(errno));
+    return strdup("");
   }
 
   /* check the cache */
-  if (cache_uid == attr.st_gid) {
+  if (cache_uid == attr.st_uid) {
     return strdup(cache_pw_name);
   }
 
@@ -643,7 +649,7 @@ char *do_get_user(struct stat attr) {
   free(cache_pw_name);
   cache_pw_name = NULL;
 
-  if (getpwuid_r(attr.st_gid, &pwd, buffer, length, &result) != 0) {
+  if (getpwuid_r(attr.st_uid, &pwd, buffer, length, &result) != 0) {
     fprintf(stderr, "%s: getpwuid_r(): %s\n", program, strerror(errno));
     return strdup("");
   }
@@ -652,7 +658,7 @@ char *do_get_user(struct stat attr) {
     user = pwd.pw_name;
   } else {
     user = buffer;
-    if (snprintf(user, length, "%ld", (long)attr.st_gid) < 0) {
+    if (snprintf(user, length, "%ld", (long)attr.st_uid) < 0) {
       fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
       return strdup("");
     }
@@ -696,7 +702,7 @@ char *do_get_group(struct stat attr) {
 
   if (!buffer) {
     fprintf(stderr, "%s: calloc(): %s\n", program, strerror(errno));
-    return "";
+    return strdup("");
   }
 
   /* check the cache */
@@ -742,19 +748,21 @@ char *do_get_group(struct stat attr) {
 char *do_get_symlink(char *path, struct stat attr) {
 
   if (S_ISLNK(attr.st_mode)) {
-    char *symlink = malloc(sizeof(char) * (attr.st_size + 2));
 
-    if (!symlink) {
-      fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
-      return "";
-    }
+    /*
+     * st_size seems to be an unreliable source of the link length
+     * it also returns 0 for many files under /proc
+     *
+     * @todo malloc + realloc
+     */
+    static char symlink[PATH_MAX];
+    ssize_t length;
 
-    if (readlink(path, symlink, sizeof(symlink) - 1) == -1) {
+    if ((length = readlink(path, symlink, sizeof(symlink) - 1)) == -1) {
       fprintf(stderr, "%s: readlink(%s): %s\n", program, path, strerror(errno));
-      free(symlink);
       return "";
     } else {
-      symlink[attr.st_size] = '\0';
+      symlink[length] = '\0';
     }
 
     return symlink;
