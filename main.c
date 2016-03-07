@@ -10,6 +10,7 @@
 #include <libgen.h>
 #include <pwd.h>
 #include <grp.h>
+#include <limits.h>
 
 typedef struct actions_t {
   int print;
@@ -278,6 +279,7 @@ int do_dir(char *path, actions_t actions, struct stat attr) {
 
     /* concat the path with the entry name */
     if (snprintf(full_path, length, "%s/%s", path, entry->d_name) < 0) {
+      free(full_path);
       fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
       return EXIT_FAILURE;
     }
@@ -393,14 +395,10 @@ int do_ls(char *path, struct stat attr) {
   if (printf("%6ld %4lld %10s %3ld %-8s %-8s %8lld %12s %s%s%s\n", inode, blocks, perms, links,
              user, group, size, mtime, path, arrow, symlink) < 0) {
     fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
-    free(user);
-    free(group);
     free(symlink);
     return EXIT_FAILURE;
   }
 
-  free(user);
-  free(group);
   free(symlink);
 
   return EXIT_SUCCESS;
@@ -618,7 +616,7 @@ char *do_get_mtime(struct stat attr) {
 char *do_get_user(struct stat attr) {
   struct passwd *pwd;
 
-  static int cache_uid = -1;
+  static unsigned int cache_uid = UINT_MAX;
   static char *cache_pw_name = NULL;
 
   /*
@@ -626,7 +624,7 @@ char *do_get_user(struct stat attr) {
    * this simple tweak makes the whole program 2x faster
    */
   if (cache_uid == attr.st_uid) {
-    return strdup(cache_pw_name);
+    return cache_pw_name;
   }
 
   pwd = getpwuid(attr.st_uid);
@@ -635,20 +633,20 @@ char *do_get_user(struct stat attr) {
     /*
      * the user is not found or getpwuid failed,
      * return the uid as a string then;
-     * a long needs 10 chars
+     * an unsigned int needs 10 chars
      */
-    char user[11];
-    if (snprintf(user, 11, "%ld", (long)attr.st_uid) < 0) {
+    static char user[11];
+    if (snprintf(user, 11, "%u", attr.st_uid) < 0) {
       fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
-      return strdup("");
+      return "";
     }
-    return strdup(user);
+    return user;
   }
 
   cache_uid = pwd->pw_uid;
   cache_pw_name = pwd->pw_name;
 
-  return strdup(pwd->pw_name);
+  return pwd->pw_name;
 }
 
 /*
@@ -661,7 +659,7 @@ char *do_get_user(struct stat attr) {
 char *do_get_group(struct stat attr) {
   struct group *grp;
 
-  static int cache_gid = -1;
+  static unsigned int cache_gid = UINT_MAX;
   static char *cache_gr_name = NULL;
 
   /*
@@ -669,7 +667,7 @@ char *do_get_group(struct stat attr) {
    * this simple tweak makes the whole program 2x faster
    */
   if (cache_gid == attr.st_gid) {
-    return strdup(cache_gr_name);
+    return cache_gr_name;
   }
 
   grp = getgrgid(attr.st_gid);
@@ -678,20 +676,20 @@ char *do_get_group(struct stat attr) {
     /*
      * the group is not found or getgrgid failed,
      * return the gid as a string then;
-     * a long needs 10 chars
+     * an unsigned int needs 10 chars
      */
-    char group[11];
-    if (snprintf(group, 11, "%ld", (long)attr.st_gid) < 0) {
+    static char group[11];
+    if (snprintf(group, 11, "%u", attr.st_gid) < 0) {
       fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
-      return strdup("");
+      return "";
     }
-    return strdup(group);
+    return group;
   }
 
   cache_gid = grp->gr_gid;
   cache_gr_name = grp->gr_name;
 
-  return strdup(grp->gr_name);
+  return grp->gr_name;
 }
 
 /*
@@ -719,7 +717,7 @@ char *do_get_symlink(char *path, struct stat attr) {
     }
 
     /* if readlink() fills the buffer, double it and run again */
-    while ((length = readlink(path, symlink, buffer)) >= buffer) {
+    while ((length = readlink(path, symlink, buffer)) >= (ssize_t)buffer) {
       buffer *= 2;
       symlink = realloc(symlink, buffer);
 
@@ -729,7 +727,7 @@ char *do_get_symlink(char *path, struct stat attr) {
       }
     }
 
-    if (length == -1) {
+    if (length < 0) {
       fprintf(stderr, "%s: readlink(%s): %s\n", program, path, strerror(errno));
       free(symlink);
       return strdup("");
@@ -739,5 +737,9 @@ char *do_get_symlink(char *path, struct stat attr) {
     return symlink;
   }
 
+  /*
+   * the entry is not a symlink
+   * strdup is needed to keep the output free-able
+   */
   return strdup("");
 }
