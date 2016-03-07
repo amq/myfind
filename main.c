@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -10,7 +11,6 @@
 #include <libgen.h>
 #include <pwd.h>
 #include <grp.h>
-#include <limits.h>
 
 typedef struct actions_t {
   int print;
@@ -581,14 +581,14 @@ char do_get_type(struct stat attr) {
 char *do_get_mtime(struct stat attr) {
   static char mtime[16]; /* 12 length + 3 special + null */
   char *format;
+
   time_t now = time(NULL);
   time_t six_months = 31556952 / 2;
-  struct tm *local_mtime;
-
-  local_mtime = localtime(&attr.st_mtime);
+  struct tm *local_mtime = localtime(&attr.st_mtime);
 
   if (!local_mtime) {
     fprintf(stderr, "%s: localtime(): %s\n", program, strerror(errno));
+    return "";
   }
 
   if ((now - six_months) < attr.st_mtime) {
@@ -599,6 +599,7 @@ char *do_get_mtime(struct stat attr) {
 
   if (strftime(mtime, sizeof(mtime), format, local_mtime) == 0) {
     fprintf(stderr, "%s: strftime(): %s\n", program, strerror(errno));
+    return "";
   }
 
   mtime[15] = '\0';
@@ -716,7 +717,10 @@ char *do_get_symlink(char *path, struct stat attr) {
       return strdup("");
     }
 
-    /* if readlink() fills the buffer, double it and run again */
+    /*
+     * if readlink() fills the buffer, double it and run again
+     * even if it equals, because we need a character for the termination
+     */
     while ((length = readlink(path, symlink, buffer)) >= (ssize_t)buffer) {
       buffer *= 2;
       symlink = realloc(symlink, buffer);
