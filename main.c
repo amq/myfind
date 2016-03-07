@@ -395,11 +395,13 @@ int do_ls(char *path, struct stat attr) {
     fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
     free(user);
     free(group);
+    free(symlink);
     return EXIT_FAILURE;
   }
 
   free(user);
   free(group);
+  free(symlink);
 
   return EXIT_SUCCESS;
 }
@@ -579,13 +581,15 @@ char do_get_type(struct stat attr) {
  * @returns the entry modification time as a string
  */
 char *do_get_mtime(struct stat attr) {
-  static char mtime[16];
+  static char mtime[16]; /* 12 length + 3 special + null */
   char *format;
   time_t now = time(NULL);
   time_t six_months = 31556952 / 2;
   struct tm *local_mtime;
 
-  if (!(local_mtime = localtime(&attr.st_mtime))) {
+  local_mtime = localtime(&attr.st_mtime);
+
+  if (!local_mtime) {
     fprintf(stderr, "%s: localtime(): %s\n", program, strerror(errno));
   }
 
@@ -631,7 +635,7 @@ char *do_get_user(struct stat attr) {
     /*
      * the user is not found or getpwuid failed,
      * return the uid as a string then;
-     * an unsigned int needs 10 chars
+     * a long needs 10 chars
      */
     char user[11];
     if (snprintf(user, 11, "%ld", (long)attr.st_uid) < 0) {
@@ -674,7 +678,7 @@ char *do_get_group(struct stat attr) {
     /*
      * the group is not found or getgrgid failed,
      * return the gid as a string then;
-     * an unsigned int needs 10 chars
+     * a long needs 10 chars
      */
     char group[11];
     if (snprintf(group, 11, "%ld", (long)attr.st_gid) < 0) {
@@ -701,25 +705,39 @@ char *do_get_group(struct stat attr) {
 char *do_get_symlink(char *path, struct stat attr) {
 
   if (S_ISLNK(attr.st_mode)) {
-
     /*
-     * st_size seems to be an unreliable source of the link length
-     * it also returns 0 for many files under /proc
-     *
-     * @todo malloc + realloc
+     * st_size appears to be an unreliable source of the link length
+     * PATH_MAX is artificial and not used by the GNU C Library
      */
-    static char symlink[PATH_MAX];
     ssize_t length;
+    size_t buffer = 128;
+    char *symlink = malloc(sizeof(char) * buffer);
 
-    if ((length = readlink(path, symlink, sizeof(symlink) - 1)) == -1) {
-      fprintf(stderr, "%s: readlink(%s): %s\n", program, path, strerror(errno));
-      return "";
-    } else {
-      symlink[length] = '\0';
+    if (!symlink) {
+      fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
+      return strdup("");
     }
 
+    /* if readlink() fills the buffer, double it and run again */
+    while ((length = readlink(path, symlink, buffer)) >= buffer) {
+      buffer *= 2;
+      symlink = realloc(symlink, buffer);
+
+      if (!symlink) {
+        fprintf(stderr, "%s: realloc(): %s\n", program, strerror(errno));
+        return strdup("");
+      }
+    }
+
+    if (length == -1) {
+      fprintf(stderr, "%s: readlink(%s): %s\n", program, path, strerror(errno));
+      free(symlink);
+      return strdup("");
+    }
+
+    symlink[length] = '\0';
     return symlink;
   }
 
-  return "";
+  return strdup("");
 }
