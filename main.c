@@ -386,11 +386,7 @@ int do_ls(char *path, struct stat attr) {
   long long size = attr.st_size;
   char *mtime = do_get_mtime(attr);
   char *symlink = do_get_symlink(path, attr);
-  char *arrow = "";
-
-  if (strlen(symlink) > 0) {
-    arrow = " -> ";
-  }
+  char *arrow = (symlink[0] == '\0') ? "" : " -> ";
 
   if (printf("%6ld %4lld %10s %3ld %-8s %-8s %8lld %12s %s%s%s\n", inode, blocks, perms, links,
              user, group, size, mtime, path, arrow, symlink) < 0) {
@@ -574,8 +570,6 @@ char do_get_type(struct stat attr) {
  *
  * @param attr the entry attributes from lstat
  *
- * @todo make sure the output is always the same as of GNU find (timezone offset?)
- *
  * @returns the entry modification time as a string
  */
 char *do_get_mtime(struct stat attr) {
@@ -583,7 +577,7 @@ char *do_get_mtime(struct stat attr) {
   char *format;
 
   time_t now = time(NULL);
-  time_t six_months = 31556952 / 2;
+  time_t six_months = 31556952 / 2; /* 365.2425 * 60 * 60 * 24 */
   struct tm *local_mtime = localtime(&attr.st_mtime);
 
   if (!local_mtime) {
