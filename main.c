@@ -38,10 +38,10 @@ int do_name(char *path, char *pattern);
 
 char do_get_type(struct stat attr);
 char *do_get_perms(struct stat attr);
-char *do_get_mtime(struct stat attr);
-char *do_get_symlink(char *path, struct stat attr);
 char *do_get_user(struct stat attr);
 char *do_get_group(struct stat attr);
+char *do_get_mtime(struct stat attr);
+char *do_get_symlink(char *path, struct stat attr);
 
 /**
  * a global variable containing the program name
@@ -258,7 +258,7 @@ int do_dir(char *path, actions_t actions, struct stat attr) {
 
   while ((entry = readdir(dir))) {
     /* skip '.' and '..' */
-    if (strcmp(".", entry->d_name) == 0 || strcmp("..", entry->d_name) == 0) {
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
       continue;
     }
 
@@ -349,7 +349,7 @@ int do_file(char *path, actions_t actions, struct stat attr) {
   return EXIT_SUCCESS;
 }
 
-/*
+/**
  * @brief prints out the path
  *
  * @param path the path to be processed
@@ -367,7 +367,7 @@ int do_print(char *path) {
   return EXIT_SUCCESS;
 }
 
-/*
+/**
  * @brief prints out the path with details
  *
  * @param path the path to be processed
@@ -400,7 +400,7 @@ int do_ls(char *path, struct stat attr) {
   return EXIT_SUCCESS;
 }
 
-/*
+/**
  * @brief returns EXIT_SUCCESS when the type matches the entry attribute
  *
  * @param type the type to match against
@@ -419,7 +419,7 @@ int do_type(char type, struct stat attr) {
   return EXIT_FAILURE;
 }
 
-/*
+/**
  * @brief returns EXIT_SUCCESS if the entry doesn't have a user
  *
  * @param attr the entry attributes from lstat
@@ -429,12 +429,24 @@ int do_type(char type, struct stat attr) {
  */
 int do_nouser(struct stat attr) {
 
-  /* amanf */
+  static unsigned int cache_uid = UINT_MAX;
 
-  return EXIT_SUCCESS;
+  /* skip getgrgid if we have the record in cache */
+  if (cache_uid == attr.st_uid) {
+    return EXIT_FAILURE;
+  }
+
+  if (!getpwuid(attr.st_uid)) {
+    return EXIT_SUCCESS;
+  }
+
+  /* cache an existing user (more common) */
+  cache_uid = attr.st_uid;
+
+  return EXIT_FAILURE;
 }
 
-/*
+/**
  * @brief returns EXIT_SUCCESS if the user(-name/-id) matches the entry attribute
  *
  * @param user the username or uid to match against
@@ -445,13 +457,14 @@ int do_nouser(struct stat attr) {
  */
 int do_user(char *user, struct stat attr) {
 
-  /* amanf */
-  /* see also do_get_username */
+  if (strcmp(do_get_user(attr), user) == 0) {
+    return EXIT_SUCCESS;
+  }
 
-  return EXIT_SUCCESS;
+  return EXIT_FAILURE;
 }
 
-/*
+/**
  * @brief returns EXIT_SUCCESS if the path matches the pattern
  *
  * @param path the entry path
@@ -467,7 +480,7 @@ int do_path(char *path, char *pattern) {
   return EXIT_SUCCESS;
 }
 
-/*
+/**
  * @brief returns EXIT_SUCCESS if the filename matches the pattern
  *
  * @param path the entry path
@@ -490,40 +503,7 @@ int do_name(char *path, char *pattern) {
   return EXIT_SUCCESS;
 }
 
-/*
- * @brief returns the entry permissions
- *
- * @param attr the entry attributes from lstat
- *
- * @returns the entry permissions as a string
- */
-char *do_get_perms(struct stat attr) {
-  static char perms[11];
-  char type = do_get_type(attr);
-
-  /*
-   * cast is used to avoid the IDE warnings
-   * about int possibly not fitting into char
-   */
-  perms[0] = (char)(type == 'f' ? '-' : type);
-  perms[1] = (char)(attr.st_mode & S_IRUSR ? 'r' : '-');
-  perms[2] = (char)(attr.st_mode & S_IWUSR ? 'w' : '-');
-  perms[3] = (char)(attr.st_mode & S_ISUID ? (attr.st_mode & S_IXUSR ? 's' : 'S')
-                                           : (attr.st_mode & S_IXUSR ? 'x' : '-'));
-  perms[4] = (char)(attr.st_mode & S_IRGRP ? 'r' : '-');
-  perms[5] = (char)(attr.st_mode & S_IWGRP ? 'w' : '-');
-  perms[6] = (char)(attr.st_mode & S_ISGID ? (attr.st_mode & S_IXGRP ? 's' : 'S')
-                                           : (attr.st_mode & S_IXGRP ? 'x' : '-'));
-  perms[7] = (char)(attr.st_mode & S_IROTH ? 'r' : '-');
-  perms[8] = (char)(attr.st_mode & S_IWOTH ? 'w' : '-');
-  perms[9] = (char)(attr.st_mode & S_ISVTX ? (attr.st_mode & S_IXOTH ? 't' : 'T')
-                                           : (attr.st_mode & S_IXOTH ? 'x' : '-'));
-  perms[10] = '\0';
-
-  return perms;
-}
-
-/*
+/**
  * @brief returns the entry type
  *
  * @param attr the entry attributes from lstat
@@ -565,7 +545,120 @@ char do_get_type(struct stat attr) {
   return '?';
 }
 
-/*
+/**
+ * @brief returns the entry permissions
+ *
+ * @param attr the entry attributes from lstat
+ *
+ * @returns the entry permissions as a string
+ */
+char *do_get_perms(struct stat attr) {
+  static char perms[11];
+  char type = do_get_type(attr);
+
+  /*
+   * cast is used to avoid the IDE warnings
+   * about int possibly not fitting into char
+   */
+  perms[0] = (char)(type == 'f' ? '-' : type);
+  perms[1] = (char)(attr.st_mode & S_IRUSR ? 'r' : '-');
+  perms[2] = (char)(attr.st_mode & S_IWUSR ? 'w' : '-');
+  perms[3] = (char)(attr.st_mode & S_ISUID ? (attr.st_mode & S_IXUSR ? 's' : 'S')
+                                           : (attr.st_mode & S_IXUSR ? 'x' : '-'));
+  perms[4] = (char)(attr.st_mode & S_IRGRP ? 'r' : '-');
+  perms[5] = (char)(attr.st_mode & S_IWGRP ? 'w' : '-');
+  perms[6] = (char)(attr.st_mode & S_ISGID ? (attr.st_mode & S_IXGRP ? 's' : 'S')
+                                           : (attr.st_mode & S_IXGRP ? 'x' : '-'));
+  perms[7] = (char)(attr.st_mode & S_IROTH ? 'r' : '-');
+  perms[8] = (char)(attr.st_mode & S_IWOTH ? 'w' : '-');
+  perms[9] = (char)(attr.st_mode & S_ISVTX ? (attr.st_mode & S_IXOTH ? 't' : 'T')
+                                           : (attr.st_mode & S_IXOTH ? 'x' : '-'));
+  perms[10] = '\0';
+
+  return perms;
+}
+
+/**
+ * @brief returns the username or uid, if user not present on the system
+ *
+ * @param attr the entry attributes from lstat
+ *
+ * @returns the username if getpwuid() worked, otherwise uid, as a string
+ */
+char *do_get_user(struct stat attr) {
+  struct passwd *pwd;
+
+  static unsigned int cache_uid = UINT_MAX;
+  static char *cache_pw_name = NULL;
+
+  /* skip getgrgid if we have the record in cache */
+  if (cache_uid == attr.st_uid) {
+    return cache_pw_name;
+  }
+
+  pwd = getpwuid(attr.st_uid);
+
+  if (!pwd) {
+    /*
+     * the user is not found or getpwuid failed,
+     * return the uid as a string then;
+     * an unsigned int needs 10 chars
+     */
+    static char user[11];
+    if (snprintf(user, 11, "%u", attr.st_uid) < 0) {
+      fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
+      return "";
+    }
+    return user;
+  }
+
+  cache_uid = pwd->pw_uid;
+  cache_pw_name = pwd->pw_name;
+
+  return pwd->pw_name;
+}
+
+/**
+ * @brief returns the groupname or gid, if group not present on the system
+ *
+ * @param attr the entry attributes from lstat
+ *
+ * @returns the groupname if getgrgid() worked, otherwise gid, as a string
+ */
+char *do_get_group(struct stat attr) {
+  struct group *grp;
+
+  static unsigned int cache_gid = UINT_MAX;
+  static char *cache_gr_name = NULL;
+
+  /* skip getgrgid if we have the record in cache */
+  if (cache_gid == attr.st_gid) {
+    return cache_gr_name;
+  }
+
+  grp = getgrgid(attr.st_gid);
+
+  if (!grp) {
+    /*
+     * the group is not found or getgrgid failed,
+     * return the gid as a string then;
+     * an unsigned int needs 10 chars
+     */
+    static char group[11];
+    if (snprintf(group, 11, "%u", attr.st_gid) < 0) {
+      fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
+      return "";
+    }
+    return group;
+  }
+
+  cache_gid = grp->gr_gid;
+  cache_gr_name = grp->gr_name;
+
+  return grp->gr_name;
+}
+
+/**
  * @brief returns the entry modification time
  *
  * @param attr the entry attributes from lstat
@@ -601,93 +694,7 @@ char *do_get_mtime(struct stat attr) {
   return mtime;
 }
 
-/*
- * @brief returns the username or uid, if user not present on the system
- *
- * @param attr the entry attributes from lstat
- *
- * @returns the username if getpwuid() worked, otherwise uid, as a string
- */
-char *do_get_user(struct stat attr) {
-  struct passwd *pwd;
-
-  static unsigned int cache_uid = UINT_MAX;
-  static char *cache_pw_name = NULL;
-
-  /*
-   * skip getpwuid if we have the record in cache
-   * this simple tweak makes the whole program 2x faster
-   */
-  if (cache_uid == attr.st_uid) {
-    return cache_pw_name;
-  }
-
-  pwd = getpwuid(attr.st_uid);
-
-  if (!pwd) {
-    /*
-     * the user is not found or getpwuid failed,
-     * return the uid as a string then;
-     * an unsigned int needs 10 chars
-     */
-    static char user[11];
-    if (snprintf(user, 11, "%u", attr.st_uid) < 0) {
-      fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
-      return "";
-    }
-    return user;
-  }
-
-  cache_uid = pwd->pw_uid;
-  cache_pw_name = pwd->pw_name;
-
-  return pwd->pw_name;
-}
-
-/*
- * @brief returns the groupname or gid, if group not present on the system
- *
- * @param attr the entry attributes from lstat
- *
- * @returns the groupname if getgrgid() worked, otherwise gid, as a string
- */
-char *do_get_group(struct stat attr) {
-  struct group *grp;
-
-  static unsigned int cache_gid = UINT_MAX;
-  static char *cache_gr_name = NULL;
-
-  /*
-   * skip getgrgid if we have the record in cache
-   * this simple tweak makes the whole program 2x faster
-   */
-  if (cache_gid == attr.st_gid) {
-    return cache_gr_name;
-  }
-
-  grp = getgrgid(attr.st_gid);
-
-  if (!grp) {
-    /*
-     * the group is not found or getgrgid failed,
-     * return the gid as a string then;
-     * an unsigned int needs 10 chars
-     */
-    static char group[11];
-    if (snprintf(group, 11, "%u", attr.st_gid) < 0) {
-      fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
-      return "";
-    }
-    return group;
-  }
-
-  cache_gid = grp->gr_gid;
-  cache_gr_name = grp->gr_name;
-
-  return grp->gr_name;
-}
-
-/*
+/**
  * @brief returns the entry symlink, if entry of type s
  *
  * @param path the entry path
@@ -714,8 +721,9 @@ char *do_get_symlink(char *path, struct stat attr) {
     /*
      * if readlink() fills the buffer, double it and run again
      * even if it equals, because we need a character for the termination
+     * a check for > 0 is mandatory, because we are comparing signed and unsigned
      */
-    while ((length = readlink(path, symlink, buffer)) >= (ssize_t)buffer) {
+    while ((length = readlink(path, symlink, buffer)) > 0 && (size_t)length >= buffer) {
       buffer *= 2;
       symlink = realloc(symlink, buffer);
 
