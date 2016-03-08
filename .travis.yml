@@ -18,7 +18,13 @@ script:
   - cd build
   - cmake ..
   - make
+  - ln -s /etc/dest link
   - ./myfind . -print
+  - ./myfind . -ls
+  - ./myfind . -type d
+  - ./myfind . -type l
+  - ./myfind . -user ubuntu
+  - ./myfind . -nouser
   - if [ "$CC" == "gcc-5" ]; then gcov-5 CMakeFiles/*/*.o; fi
 after_success:
   - if [ "$CC" == "gcc-5" ]; then bash <(curl -s https://codecov.io/bash); fi
