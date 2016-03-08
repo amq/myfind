@@ -20,11 +20,27 @@ script:
   - make
   - ln -s /etc/dest link
   - ./myfind . -print
+  - find . -print
   - ./myfind . -ls
+  - find . -ls
+  - ./myfind . -type d -ls
+  - find . -type d -ls
+  - ./myfind . -ls -type d
+  - find .-ls -type d
   - ./myfind . -type d
+  - find . -type d
   - ./myfind . -type l
+  - find . -type l
   - ./myfind . -user ubuntu
+  - find . -user ubuntu
+  - ./myfind . -user travis
+  - find . -user travis
   - ./myfind . -nouser
+  - find . -nouser
+  - ./myfind . -user travis -type f -ls
+  - find . -user travis -type f -ls
+  - ./myfind . -type f -ls -user travis
+  - find . -type f -ls -user travis
   - if [ "$CC" == "gcc-5" ]; then gcov-5 CMakeFiles/*/*.o; fi
 after_success:
   - if [ "$CC" == "gcc-5" ]; then bash <(curl -s https://codecov.io/bash); fi
