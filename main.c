@@ -85,9 +85,9 @@ int main(int argc, char *argv[]) {
     return EXIT_SUCCESS;
   }
 
-  if (params->location) {
-    location = params[0].location;
-  } else {
+  location = params->location;
+
+  if (!location) {
     location = ".";
   }
 
@@ -108,9 +108,11 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  do {
+  while (params) {
+    params_t *next = params->next;
     free(params);
-  } while ((params = params->next));
+    params = next;
+  }
 
   return EXIT_SUCCESS;
 }
@@ -160,7 +162,7 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
   /* params can start from argv[1] */
   for (i = 1; i < argc; i++, params = params->next) {
 
-    /* allocate space for the next run */
+    /* allocate memory for the next run */
     params->next = calloc(1, sizeof(*params));
 
     /* parameters consisting of a single part */
