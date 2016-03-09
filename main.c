@@ -24,14 +24,13 @@ typedef struct params_t {
   unsigned int userid;
   char *path;
   char *name;
-  struct params_t *next;
 } params_t;
 
 void do_help(void);
-int do_parse_params(int argc, char *argv[], params_t *params);
+int do_parse_params(char *argv[], int *paramsc, params_t *params);
 
-int do_dir(char *path, params_t *params, struct stat attr);
-int do_file(char *path, params_t *params, struct stat attr);
+int do_file(char *path, int paramsc, params_t *params, struct stat attr);
+int do_dir(char *path, int paramsc, params_t *params, struct stat attr);
 
 int do_print(char *path);
 int do_ls(char *path, struct stat attr);
@@ -65,8 +64,9 @@ char *program;
  * @retval EXIT_FAILURE
  */
 int main(int argc, char *argv[]) {
-  params_t *params = calloc(1, sizeof(*params));
   struct stat attr;
+  int paramsc;
+  params_t *params;
   char *location;
 
   program = argv[0];
@@ -76,16 +76,24 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "%s: setlocale() failed\n", program);
   }
 
-  if (do_parse_params(argc, argv, params) != EXIT_SUCCESS) {
+  /* argc can be a bit more than we need, but definitely not less */
+  params = calloc((size_t)argc, sizeof(*params));
+
+  if (!params) {
+    fprintf(stderr, "%s: calloc(): %s\n", program, strerror(errno));
     return EXIT_FAILURE;
   }
 
-  if (params->help) {
+  if (do_parse_params(argv, &paramsc, params) != EXIT_SUCCESS) {
+    return EXIT_FAILURE;
+  }
+
+  if (params[1].help) {
     do_help();
     return EXIT_SUCCESS;
   }
 
-  location = params->location;
+  location = params[1].location;
 
   if (!location) {
     location = ".";
@@ -97,22 +105,19 @@ int main(int argc, char *argv[]) {
    */
   if (lstat(location, &attr) == 0) {
     /* process the input */
-    do_file(location, params, attr);
+    do_file(location, paramsc, params, attr);
 
     /* if a directory, process its contents */
     if (S_ISDIR(attr.st_mode)) {
-      do_dir(location, params, attr);
+      do_dir(location, paramsc, params, attr);
     }
   } else {
     fprintf(stderr, "%s: lstat(%s): %s\n", program, location, strerror(errno));
+    free(params);
     return EXIT_FAILURE;
   }
 
-  while (params) {
-    params_t *next = params->next;
-    free(params);
-    params = next;
-  }
+  free(params);
 
   return EXIT_SUCCESS;
 }
@@ -140,61 +145,66 @@ void do_help(void) {
 }
 
 /**
- * @brief parses params and populates the params struct
+ * @brief parses params and populates the params struct array
  *
  * @param params the arguments from argv
- * @param params the struct to populate
+ * @param params the struct array to populate
  *
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
-int do_parse_params(int argc, char *argv[], params_t *params) {
-  int i;
+int do_parse_params(char *argv[], int *paramsc, params_t *params) {
+  struct passwd *pwd;
+  *paramsc = 1;
+  int i; /* the counter variable is used outside of the loop */
+
+  if (!params) {
+    fprintf(stderr, "%s: do_parse_params(): `params' not initialized\n", program);
+    return EXIT_FAILURE;
+  }
 
   /*
    * 0 = ok or nothing to check
    * 1 = unknown predicate
    * 2 = missing argument for predicate
    * 3 = unknown argument for predicate
+   * 4 = unknown user
    */
   int status = 0;
 
   /* params can start from argv[1] */
-  for (i = 1; i < argc; i++, params = params->next) {
-
-    /* allocate memory for the next run */
-    params->next = calloc(1, sizeof(*params));
+  for (i = 1; argv[i]; i++) {
+    *paramsc += 1;
 
     /* parameters consisting of a single part */
     if (strcmp(argv[i], "-help") == 0) {
-      params->help = 1;
+      params[i].help = 1;
       continue;
     }
     if (strcmp(argv[i], "-print") == 0) {
-      params->print = 1;
+      params[i].print = 1;
       continue;
     }
     if (strcmp(argv[i], "-ls") == 0) {
-      params->ls = 1;
+      params[i].ls = 1;
       continue;
     }
     if (strcmp(argv[i], "-nouser") == 0) {
-      params->nouser = 1;
+      params[i].nouser = 1;
       continue;
     }
 
     /* parameters expecting a non-empty second part */
     if (strcmp(argv[i], "-user") == 0) {
       if (argv[++i]) {
-        params->user = argv[i];
+        params[i].user = argv[i];
         /* check if the user exists */
-        struct passwd *pwd = getpwnam(params->user);
-        if (pwd) {
-          params->userid = pwd->pw_uid;
+        if ((pwd = getpwnam(params[i].user))) {
+          params[i].userid = pwd->pw_uid;
           continue;
         }
         /* otherwise, if the input is a number, use that */
-        if (sscanf(params->user, "%u", &params->userid)) {
+        if (sscanf(params[i].user, "%u", &params[i].userid)) {
           continue;
         }
         /* the input is unusable */
@@ -207,7 +217,7 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
     }
     if (strcmp(argv[i], "-name") == 0) {
       if (argv[++i]) {
-        params->name = argv[i];
+        params[i].name = argv[i];
         continue;
       } else {
         status = 2;
@@ -216,7 +226,7 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
     }
     if (strcmp(argv[i], "-path") == 0) {
       if (argv[++i]) {
-        params->path = argv[i];
+        params[i].path = argv[i];
         continue;
       } else {
         status = 2;
@@ -231,7 +241,7 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
             (strcmp(argv[i], "d") == 0) || (strcmp(argv[i], "p") == 0) ||
             (strcmp(argv[i], "f") == 0) || (strcmp(argv[i], "l") == 0) ||
             (strcmp(argv[i], "s") == 0)) {
-          params->type = argv[i][0];
+          params[i].type = argv[i][0];
           continue;
         } else {
           status = 3;
@@ -243,8 +253,9 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
       }
     }
 
+    /* if argv[1] didn't match, consider it a path */
     if (i == 1) {
-      params->location = argv[i];
+      params[i].location = argv[i];
       continue;
     }
 
@@ -275,6 +286,57 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
 }
 
 /**
+ * @brief calls subfunctions based on the params struct
+ *
+ * @param path the path to be processed
+ * @param params the parsed parameters
+ * @param attr the entry attributes from lstat
+ *
+ * @retval EXIT_SUCCESS
+ * @retval EXIT_FAILURE
+ */
+int do_file(char *path, int paramsc, params_t *params, struct stat attr) {
+  int printed = 0;
+
+  if (!params) {
+    fprintf(stderr, "%s: do_file(): `params' not initialized\n", program);
+    return EXIT_FAILURE;
+  }
+
+  for (int i = 1; i <= paramsc; i++) {
+    if (params[i].type && do_type(params[i].type, attr) != EXIT_SUCCESS) {
+      return EXIT_SUCCESS;
+    }
+    if (params[i].nouser && do_nouser(attr) != EXIT_SUCCESS) {
+      return EXIT_SUCCESS;
+    }
+    if (params[i].user && do_user(params[i].userid, attr) != EXIT_SUCCESS) {
+      return EXIT_SUCCESS;
+    }
+    if (params[i].name && do_name(path, params[i].name) != EXIT_SUCCESS) {
+      return EXIT_SUCCESS;
+    }
+    if (params[i].path && do_path(path, params[i].path) != EXIT_SUCCESS) {
+      return EXIT_SUCCESS;
+    }
+    if (params[i].print) {
+      do_print(path);
+      printed = 1;
+    }
+    if (params[i].ls) {
+      do_ls(path, attr);
+      printed = 1;
+    }
+  }
+
+  if (printed == 0) {
+    do_print(path);
+  }
+
+  return EXIT_SUCCESS;
+}
+
+/**
  * @brief calls do_file on each directory entry recursively
  *
  * @param path the path to be processed
@@ -284,10 +346,11 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
-int do_dir(char *path, params_t *params, struct stat attr) {
+int do_dir(char *path, int paramsc, params_t *params, struct stat attr) {
   DIR *dir;
   struct dirent *entry;
   size_t length;
+  char *full_path;
 
   dir = opendir(path);
 
@@ -310,7 +373,7 @@ int do_dir(char *path, params_t *params, struct stat attr) {
 
     /* allocate memory for the full entry path */
     length = strlen(path) + strlen(entry->d_name) + 2;
-    char *full_path = malloc(sizeof(char) * length);
+    full_path = malloc(sizeof(char) * length);
 
     if (!full_path) {
       fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
@@ -326,11 +389,11 @@ int do_dir(char *path, params_t *params, struct stat attr) {
 
     /* process the entry */
     if (lstat(full_path, &attr) == 0) {
-      do_file(full_path, params, attr);
+      do_file(full_path, paramsc, params, attr);
 
       /* if a directory, call the function recursively */
       if (S_ISDIR(attr.st_mode)) {
-        do_dir(full_path, params, attr);
+        do_dir(full_path, paramsc, params, attr);
       }
     } else {
       fprintf(stderr, "%s: lstat(%s): %s\n", program, full_path, strerror(errno));
@@ -344,52 +407,6 @@ int do_dir(char *path, params_t *params, struct stat attr) {
   if (closedir(dir) != 0) {
     fprintf(stderr, "%s: closedir(%s): %s\n", program, path, strerror(errno));
     return EXIT_FAILURE;
-  }
-
-  return EXIT_SUCCESS;
-}
-
-/**
- * @brief calls subfunctions based on the params struct
- *
- * @param path the path to be processed
- * @param params the parsed parameters
- * @param attr the entry attributes from lstat
- *
- * @retval EXIT_SUCCESS
- * @retval EXIT_FAILURE
- */
-int do_file(char *path, params_t *params, struct stat attr) {
-  int printed = 0;
-
-  do {
-    if (params->type && do_type(params->type, attr) != EXIT_SUCCESS) {
-      return EXIT_SUCCESS;
-    }
-    if (params->nouser && do_nouser(attr) != EXIT_SUCCESS) {
-      return EXIT_SUCCESS;
-    }
-    if (params->user && do_user(params->userid, attr) != EXIT_SUCCESS) {
-      return EXIT_SUCCESS;
-    }
-    if (params->name && do_name(path, params->name) != EXIT_SUCCESS) {
-      return EXIT_SUCCESS;
-    }
-    if (params->path && do_path(path, params->path) != EXIT_SUCCESS) {
-      return EXIT_SUCCESS;
-    }
-    if (params->print) {
-      do_print(path);
-      printed = 1;
-    }
-    if (params->ls) {
-      do_ls(path, attr);
-      printed = 1;
-    }
-  } while ((params = params->next));
-
-  if (printed == 0) {
-    do_print(path);
   }
 
   return EXIT_SUCCESS;
@@ -474,7 +491,6 @@ int do_type(char type, struct stat attr) {
  * @retval EXIT_FAILURE
  */
 int do_nouser(struct stat attr) {
-
   static unsigned int cache_uid = UINT_MAX;
 
   /* skip getgrgid if we have the record in cache */
