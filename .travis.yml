@@ -39,8 +39,6 @@ script:
   - find . -user travis -type f -ls
   - ./myfind . -type f -ls -user travis
   - find . -type f -ls -user travis
-  - ./myfind . -user haha
-  - find . -user haha
   - ./myfind . -user 1000
   - find . -user 1000
   - ./myfind . -name main

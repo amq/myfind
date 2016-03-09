@@ -15,6 +15,7 @@
 
 typedef struct params_t {
   char *location;
+  int help;
   int print;
   int ls;
   int nouser;
@@ -75,8 +76,12 @@ int main(int argc, char *argv[]) {
   }
 
   if (do_parse_params(argc, argv, &params) != EXIT_SUCCESS) {
-    do_print_usage();
     return EXIT_FAILURE;
+  }
+
+  if (params.help) {
+    do_print_usage();
+    return EXIT_SUCCESS;
   }
 
   if (params.location) {
@@ -115,6 +120,7 @@ int main(int argc, char *argv[]) {
 void do_print_usage(void) {
 
   if (printf("myfind <file or directory> [ <aktion> ]\n"
+             "-help               show this message\n"
              "-user <name>|<uid>  entries belonging to a user\n"
              "-name <pattern>     entry names matching a pattern\n"
              "-type [bcdpfls]     entries of a specific type\n"
@@ -153,6 +159,10 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
   for (i = 1; i < argc; i++) {
 
     /* parameters consisting of a single part */
+    if (strcmp(argv[i], "-help") == 0) {
+      params->help = 1;
+      continue;
+    }
     if (strcmp(argv[i], "-print") == 0) {
       params->print = 1;
       continue;
