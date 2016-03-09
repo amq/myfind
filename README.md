@@ -33,3 +33,27 @@ Usage
 -name <pattern>     entry names matching a pattern
 -path <pattern>     entry paths (incl. names) matching a pattern
 ```
+
+Performance
+```
+# tested 5 times and recorded the best result
+
+time ./myfind / -ls > mylist.txt
+
+real	0m1.464s
+user	0m0.604s
+sys	    0m0.844s
+
+VIRT    RES    SHR
+21868   2512   2188
+
+
+time find / -ls > list.txt
+
+real	0m1.519s
+user	0m0.784s
+sys 	0m0.728s
+
+VIRT    RES    SHR
+25044   2972   2568
+```
