@@ -30,8 +30,8 @@ typedef struct params_t {
 void do_help(void);
 int do_parse_params(int argc, char *argv[], params_t *params);
 
-int do_dir(char *path, params_t *params, struct stat attr);
 int do_file(char *path, params_t *params, struct stat attr);
+int do_dir(char *path, params_t *params, struct stat attr);
 
 int do_print(char *path);
 int do_ls(char *path, struct stat attr);
@@ -56,7 +56,7 @@ char *do_get_symlink(char *path, struct stat attr);
 char *program;
 
 /**
- * @brief calls do_file on argv[1] and additionally do_dir, if a directory
+ * @brief calls do_parse_params, then do_file and, if a directory, do_dir
  *
  * @param argc number of arguments
  * @param argv the arguments
@@ -65,7 +65,6 @@ char *program;
  * @retval EXIT_FAILURE
  */
 int main(int argc, char *argv[]) {
-  params_t *params = calloc(1, sizeof(*params));
   struct stat attr;
   char *location;
 
@@ -74,6 +73,13 @@ int main(int argc, char *argv[]) {
   /* honor the system locale */
   if (!setlocale(LC_ALL, "")) {
     fprintf(stderr, "%s: setlocale() failed\n", program);
+  }
+
+  params_t *params = calloc(1, sizeof(*params));
+
+  if (!params) {
+    fprintf(stderr, "%s: calloc(): %s\n", program, strerror(errno));
+    return EXIT_FAILURE;
   }
 
   if (do_parse_params(argc, argv, params) != EXIT_SUCCESS) {
@@ -140,7 +146,7 @@ void do_help(void) {
 }
 
 /**
- * @brief parses params and populates the params struct
+ * @brief parses argv and populates the params struct
  *
  * @param params the arguments from argv
  * @param params the struct to populate
@@ -149,6 +155,7 @@ void do_help(void) {
  * @retval EXIT_FAILURE
  */
 int do_parse_params(int argc, char *argv[], params_t *params) {
+  struct passwd *pwd;
   int i;
 
   /*
@@ -156,6 +163,7 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
    * 1 = unknown predicate
    * 2 = missing argument for predicate
    * 3 = unknown argument for predicate
+   * 4 = unknown user
    */
   int status = 0;
 
@@ -164,6 +172,11 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
 
     /* allocate memory for the next run */
     params->next = calloc(1, sizeof(*params));
+
+    if (!params->next) {
+      fprintf(stderr, "%s: calloc(): %s\n", program, strerror(errno));
+      return EXIT_FAILURE;
+    }
 
     /* parameters consisting of a single part */
     if (strcmp(argv[i], "-help") == 0) {
@@ -188,8 +201,7 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
       if (argv[++i]) {
         params->user = argv[i];
         /* check if the user exists */
-        struct passwd *pwd = getpwnam(params->user);
-        if (pwd) {
+        if ((pwd = getpwnam(params->user))) {
           params->userid = pwd->pw_uid;
           continue;
         }
@@ -243,6 +255,7 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
       }
     }
 
+    /* if the first parameter didn't match, consider it a path */
     if (i == 1) {
       params->location = argv[i];
       continue;
@@ -268,81 +281,6 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
   }
   if (status == 4) {
     fprintf(stderr, "%s: `%s' is not the name of a known user\n", program, argv[i]);
-    return EXIT_FAILURE;
-  }
-
-  return EXIT_SUCCESS;
-}
-
-/**
- * @brief calls do_file on each directory entry recursively
- *
- * @param path the path to be processed
- * @param params the parsed parameters
- * @param attr the entry attributes from lstat
- *
- * @retval EXIT_SUCCESS
- * @retval EXIT_FAILURE
- */
-int do_dir(char *path, params_t *params, struct stat attr) {
-  DIR *dir;
-  struct dirent *entry;
-  size_t length;
-
-  dir = opendir(path);
-
-  if (!dir) {
-    fprintf(stderr, "%s: opendir(%s): %s\n", program, path, strerror(errno));
-    return EXIT_FAILURE; /* stops a function call, the program continues */
-  }
-
-  while ((entry = readdir(dir))) {
-    /* skip '.' and '..' */
-    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-      continue;
-    }
-
-    /* avoid '//' in path if the input has a trailing slash */
-    length = strlen(path);
-    if (path[length - 1] == '/') {
-      path[length - 1] = '\0';
-    }
-
-    /* allocate memory for the full entry path */
-    length = strlen(path) + strlen(entry->d_name) + 2;
-    char *full_path = malloc(sizeof(char) * length);
-
-    if (!full_path) {
-      fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
-      return EXIT_FAILURE;
-    }
-
-    /* concat the path with the entry name */
-    if (snprintf(full_path, length, "%s/%s", path, entry->d_name) < 0) {
-      free(full_path);
-      fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
-      return EXIT_FAILURE;
-    }
-
-    /* process the entry */
-    if (lstat(full_path, &attr) == 0) {
-      do_file(full_path, params, attr);
-
-      /* if a directory, call the function recursively */
-      if (S_ISDIR(attr.st_mode)) {
-        do_dir(full_path, params, attr);
-      }
-    } else {
-      fprintf(stderr, "%s: lstat(%s): %s\n", program, full_path, strerror(errno));
-      free(full_path);
-      return EXIT_FAILURE;
-    }
-
-    free(full_path);
-  }
-
-  if (closedir(dir) != 0) {
-    fprintf(stderr, "%s: closedir(%s): %s\n", program, path, strerror(errno));
     return EXIT_FAILURE;
   }
 
@@ -396,6 +334,82 @@ int do_file(char *path, params_t *params, struct stat attr) {
 }
 
 /**
+ * @brief calls do_file on each directory entry recursively
+ *
+ * @param path the path to be processed
+ * @param params the parsed parameters
+ * @param attr the entry attributes from lstat
+ *
+ * @retval EXIT_SUCCESS
+ * @retval EXIT_FAILURE
+ */
+int do_dir(char *path, params_t *params, struct stat attr) {
+  DIR *dir;
+  struct dirent *entry;
+  size_t length;
+  char *full_path;
+
+  dir = opendir(path);
+
+  if (!dir) {
+    fprintf(stderr, "%s: opendir(%s): %s\n", program, path, strerror(errno));
+    return EXIT_FAILURE; /* stops a function call, the program continues */
+  }
+
+  while ((entry = readdir(dir))) {
+    /* skip '.' and '..' */
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+      continue;
+    }
+
+    /* avoid '//' in path if the input has a trailing slash */
+    length = strlen(path);
+    if (path[length - 1] == '/') {
+      path[length - 1] = '\0';
+    }
+
+    /* allocate memory for the full entry path */
+    length = strlen(path) + strlen(entry->d_name) + 2;
+    full_path = malloc(sizeof(char) * length);
+
+    if (!full_path) {
+      fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
+      return EXIT_FAILURE;
+    }
+
+    /* concat the path with the entry name */
+    if (snprintf(full_path, length, "%s/%s", path, entry->d_name) < 0) {
+      free(full_path);
+      fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
+      return EXIT_FAILURE;
+    }
+
+    /* process the entry */
+    if (lstat(full_path, &attr) == 0) {
+      do_file(full_path, params, attr);
+
+      /* if a directory, call the function recursively */
+      if (S_ISDIR(attr.st_mode)) {
+        do_dir(full_path, params, attr);
+      }
+    } else {
+      fprintf(stderr, "%s: lstat(%s): %s\n", program, full_path, strerror(errno));
+      free(full_path);
+      return EXIT_FAILURE;
+    }
+
+    free(full_path);
+  }
+
+  if (closedir(dir) != 0) {
+    fprintf(stderr, "%s: closedir(%s): %s\n", program, path, strerror(errno));
+    return EXIT_FAILURE;
+  }
+
+  return EXIT_SUCCESS;
+}
+
+/**
  * @brief prints out the path
  *
  * @param path the path to be processed
@@ -432,7 +446,7 @@ int do_ls(char *path, struct stat attr) {
   long long size = attr.st_size;
   char *mtime = do_get_mtime(attr);
   char *symlink = do_get_symlink(path, attr);
-  char *arrow = (symlink[0] == '\0') ? "" : " -> ";
+  char *arrow = symlink[0] ? " -> " : "";
 
   if (printf("%6ld %4lld %10s %3ld %-8s %-8s %8lld %12s %s%s%s\n", inode, blocks, perms, links,
              user, group, size, mtime, path, arrow, symlink) < 0) {
@@ -447,7 +461,7 @@ int do_ls(char *path, struct stat attr) {
 }
 
 /**
- * @brief returns EXIT_SUCCESS when the type matches the entry attribute
+ * @brief returns EXIT_SUCCESS if the type matches the entry attribute
  *
  * @param type the type to match against
  * @param attr the entry attributes from lstat
@@ -474,7 +488,6 @@ int do_type(char type, struct stat attr) {
  * @retval EXIT_FAILURE
  */
 int do_nouser(struct stat attr) {
-
   static unsigned int cache_uid = UINT_MAX;
 
   /* skip getgrgid if we have the record in cache */
@@ -493,7 +506,7 @@ int do_nouser(struct stat attr) {
 }
 
 /**
- * @brief returns EXIT_SUCCESS if the user(-name/-id) matches the entry attribute
+ * @brief returns EXIT_SUCCESS if the userid matches the entry attribute
  *
  * @param user the username or uid to match against
  * @param attr the entry attributes from lstat
@@ -629,7 +642,7 @@ char *do_get_perms(struct stat attr) {
 }
 
 /**
- * @brief returns the username or uid, if user not present on the system
+ * @brief returns the entry user or uid, if user not present on the system
  *
  * @param attr the entry attributes from lstat
  *
@@ -669,7 +682,7 @@ char *do_get_user(struct stat attr) {
 }
 
 /**
- * @brief returns the groupname or gid, if group not present on the system
+ * @brief returns the entry group or gid, if group not present on the system
  *
  * @param attr the entry attributes from lstat
  *

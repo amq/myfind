@@ -3,14 +3,15 @@
 - the goal is to fully mimic GNU `find` (with a limited set of options)
 - performance is comparable to `find`
 - no memory leaks
-- `lstat` calls are done exactly once per entry
-- an unlimited path and symlink length is supported
+- no action is repeated, if possible. Most notably, `lstat` calls are done exactly once per entry
+- no limits for the path and symlink length
 - "microservices": everyting is decoupled into functions
-- exclusively `EXIT_SUCCESS` and `EXIT_FAILURE`
+- relying exclusively on `EXIT_SUCCESS` and `EXIT_FAILURE`
 - errors are checked for every function, even `printf`
 - the output of `pwd` and `grp` is cached (this makes `-ls` 3x faster)
 - constant testing during development: performance, memory usage, static code analysis, Travis with `gcc` and `clang`
-- consistent code style (LLVM), automatically maintained by `clang-format`
+- consistent code formatting (LLVM), automatically maintained by `clang-format`
+- full support of `gnu99` and `gnu11` standards
 
 Building
 ```
