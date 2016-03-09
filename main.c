@@ -24,13 +24,14 @@ typedef struct params_t {
   unsigned int userid;
   char *path;
   char *name;
+  struct params_t *next;
 } params_t;
 
-void do_print_usage(void);
+void do_help(void);
 int do_parse_params(int argc, char *argv[], params_t *params);
 
-int do_dir(char *path, params_t params, struct stat attr);
-int do_file(char *path, params_t params, struct stat attr);
+int do_dir(char *path, params_t *params, struct stat attr);
+int do_file(char *path, params_t *params, struct stat attr);
 
 int do_print(char *path);
 int do_ls(char *path, struct stat attr);
@@ -64,7 +65,7 @@ char *program;
  * @retval EXIT_FAILURE
  */
 int main(int argc, char *argv[]) {
-  params_t params;
+  params_t *params = calloc(1, sizeof(*params));
   struct stat attr;
   char *location;
 
@@ -75,17 +76,17 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "%s: setlocale() failed\n", program);
   }
 
-  if (do_parse_params(argc, argv, &params) != EXIT_SUCCESS) {
+  if (do_parse_params(argc, argv, params) != EXIT_SUCCESS) {
     return EXIT_FAILURE;
   }
 
-  if (params.help) {
-    do_print_usage();
+  if (params->help) {
+    do_help();
     return EXIT_SUCCESS;
   }
 
-  if (params.location) {
-    location = params.location;
+  if (params->location) {
+    location = params[0].location;
   } else {
     location = ".";
   }
@@ -107,6 +108,10 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
+  do {
+    free(params);
+  } while ((params = params->next));
+
   return EXIT_SUCCESS;
 }
 
@@ -117,7 +122,7 @@ int main(int argc, char *argv[]) {
  *
  * @retval void
  */
-void do_print_usage(void) {
+void do_help(void) {
 
   if (printf("myfind <file or directory> [ <aktion> ]\n"
              "-help               show this message\n"
@@ -142,10 +147,7 @@ void do_print_usage(void) {
  * @retval EXIT_FAILURE
  */
 int do_parse_params(int argc, char *argv[], params_t *params) {
-  int i = 0; /* the counter variable is used outside of the loop */
-
-  /* initialize the params with zeroes */
-  memset(params, 0, sizeof(*params));
+  int i;
 
   /*
    * 0 = ok or nothing to check
@@ -155,8 +157,11 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
    */
   int status = 0;
 
-  /* parameters can start from argv[1] */
-  for (i = 1; i < argc; i++) {
+  /* params can start from argv[1] */
+  for (i = 1; i < argc; i++, params = params->next) {
+
+    /* allocate space for the next run */
+    params->next = calloc(1, sizeof(*params));
 
     /* parameters consisting of a single part */
     if (strcmp(argv[i], "-help") == 0) {
@@ -277,7 +282,7 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
-int do_dir(char *path, params_t params, struct stat attr) {
+int do_dir(char *path, params_t *params, struct stat attr) {
   DIR *dir;
   struct dirent *entry;
   size_t length;
@@ -352,31 +357,37 @@ int do_dir(char *path, params_t params, struct stat attr) {
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
-int do_file(char *path, params_t params, struct stat attr) {
+int do_file(char *path, params_t *params, struct stat attr) {
+  int printed = 0;
 
-  /* filtering */
-  if (params.type && do_type(params.type, attr) != EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }
-  if (params.nouser && do_nouser(attr) != EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }
-  if (params.user && do_user(params.userid, attr) != EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }
-  if (params.name && do_name(path, params.name) != EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }
-  if (params.path && do_path(path, params.path) != EXIT_SUCCESS) {
-    return EXIT_SUCCESS;
-  }
+  do {
+    if (params->type && do_type(params->type, attr) != EXIT_SUCCESS) {
+      return EXIT_SUCCESS;
+    }
+    if (params->nouser && do_nouser(attr) != EXIT_SUCCESS) {
+      return EXIT_SUCCESS;
+    }
+    if (params->user && do_user(params->userid, attr) != EXIT_SUCCESS) {
+      return EXIT_SUCCESS;
+    }
+    if (params->name && do_name(path, params->name) != EXIT_SUCCESS) {
+      return EXIT_SUCCESS;
+    }
+    if (params->path && do_path(path, params->path) != EXIT_SUCCESS) {
+      return EXIT_SUCCESS;
+    }
+    if (params->print) {
+      do_print(path);
+      printed = 1;
+    }
+    if (params->ls) {
+      do_ls(path, attr);
+      printed = 1;
+    }
+  } while ((params = params->next));
 
-  /* printing */
-  if ((!params.ls || params.print) && do_print(path) != EXIT_SUCCESS) {
-    return EXIT_FAILURE;
-  }
-  if (params.ls && do_ls(path, attr) != EXIT_SUCCESS) {
-    return EXIT_FAILURE;
+  if (printed == 0) {
+    do_print(path);
   }
 
   return EXIT_SUCCESS;
