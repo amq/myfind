@@ -11,30 +11,33 @@
 #include <libgen.h>
 #include <pwd.h>
 #include <grp.h>
+#include <fnmatch.h>
 
-typedef struct actions_t {
+typedef struct params_t {
+  char *location;
   int print;
   int ls;
   int nouser;
   char type;
   char *user;
+  unsigned int userid;
   char *path;
   char *name;
-} actions_t;
+} params_t;
 
 void do_print_usage(void);
-int do_parse_params(char *argv[], actions_t *actions);
+int do_parse_params(int argc, char *argv[], params_t *params);
 
-int do_dir(char *path, actions_t actions, struct stat attr);
-int do_file(char *path, actions_t actions, struct stat attr);
+int do_dir(char *path, params_t params, struct stat attr);
+int do_file(char *path, params_t params, struct stat attr);
 
 int do_print(char *path);
 int do_ls(char *path, struct stat attr);
 int do_type(char type, struct stat attr);
 int do_nouser(struct stat attr);
-int do_user(char *user, struct stat attr);
-int do_path(char *path, char *pattern);
+int do_user(unsigned int userid, struct stat attr);
 int do_name(char *path, char *pattern);
+int do_path(char *path, char *pattern);
 
 char do_get_type(struct stat attr);
 char *do_get_perms(struct stat attr);
@@ -60,43 +63,42 @@ char *program;
  * @retval EXIT_FAILURE
  */
 int main(int argc, char *argv[]) {
-  actions_t actions;
+  params_t params;
   struct stat attr;
+  char *location;
+
+  program = argv[0];
 
   /* honor the system locale */
   if (!setlocale(LC_ALL, "")) {
     fprintf(stderr, "%s: setlocale() failed\n", program);
   }
 
-  /*
-   * a minimum of 3 input parameters are required
-   * myfind <file or directory> [ <aktion> ]
-   */
-  if (argc < 3) {
+  if (do_parse_params(argc, argv, &params) != EXIT_SUCCESS) {
     do_print_usage();
     return EXIT_FAILURE;
   }
 
-  program = argv[0];
-
-  if (do_parse_params(argv, &actions) != EXIT_SUCCESS) {
-    return EXIT_FAILURE;
+  if (params.location) {
+    location = params.location;
+  } else {
+    location = ".";
   }
 
   /*
    * try reading the attributes of the input
    * to verify that it exists and to check if it is a directory
    */
-  if (lstat(argv[1], &attr) == 0) {
+  if (lstat(location, &attr) == 0) {
     /* process the input */
-    do_file(argv[1], actions, attr);
+    do_file(location, params, attr);
 
     /* if a directory, process its contents */
     if (S_ISDIR(attr.st_mode)) {
-      do_dir(argv[1], actions, attr);
+      do_dir(location, params, attr);
     }
   } else {
-    fprintf(stderr, "%s: lstat(%s): %s\n", program, argv[1], strerror(errno));
+    fprintf(stderr, "%s: lstat(%s): %s\n", program, location, strerror(errno));
     return EXIT_FAILURE;
   }
 
@@ -125,7 +127,7 @@ void do_print_usage(void) {
 }
 
 /**
- * @brief parses params and populates the actions struct
+ * @brief parses params and populates the params struct
  *
  * @param params the arguments from argv
  * @param params the struct to populate
@@ -133,11 +135,11 @@ void do_print_usage(void) {
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
-int do_parse_params(char *argv[], actions_t *actions) {
+int do_parse_params(int argc, char *argv[], params_t *params) {
   int i = 0; /* the counter variable is used outside of the loop */
 
-  /* initialize the actions with zeroes */
-  memset(actions, 0, sizeof(*actions));
+  /* initialize the params with zeroes */
+  memset(params, 0, sizeof(*params));
 
   /*
    * 0 = ok or nothing to check
@@ -147,28 +149,40 @@ int do_parse_params(char *argv[], actions_t *actions) {
    */
   int status = 0;
 
-  /* parameters start from argv[2] */
-  for (i = 2; argv[i]; i++) {
+  /* parameters can start from argv[1] */
+  for (i = 1; i < argc; i++) {
 
     /* parameters consisting of a single part */
     if (strcmp(argv[i], "-print") == 0) {
-      actions->print = 1;
+      params->print = 1;
       continue;
     }
     if (strcmp(argv[i], "-ls") == 0) {
-      actions->ls = 1;
+      params->ls = 1;
       continue;
     }
     if (strcmp(argv[i], "-nouser") == 0) {
-      actions->nouser = 1;
+      params->nouser = 1;
       continue;
     }
 
     /* parameters expecting a non-empty second part */
     if (strcmp(argv[i], "-user") == 0) {
       if (argv[++i]) {
-        actions->user = argv[i];
-        continue;
+        params->user = argv[i];
+        /* check if the user exists */
+        struct passwd *pwd = getpwnam(params->user);
+        if (pwd) {
+          params->userid = pwd->pw_uid;
+          continue;
+        }
+        /* otherwise, if the input is a number, use that */
+        if (sscanf(params->user, "%u", &params->userid)) {
+          continue;
+        }
+        /* the input is unusable */
+        status = 4;
+        break;
       } else {
         status = 2;
         break; /* the second part is missing */
@@ -176,7 +190,7 @@ int do_parse_params(char *argv[], actions_t *actions) {
     }
     if (strcmp(argv[i], "-name") == 0) {
       if (argv[++i]) {
-        actions->name = argv[i];
+        params->name = argv[i];
         continue;
       } else {
         status = 2;
@@ -185,7 +199,7 @@ int do_parse_params(char *argv[], actions_t *actions) {
     }
     if (strcmp(argv[i], "-path") == 0) {
       if (argv[++i]) {
-        actions->path = argv[i];
+        params->path = argv[i];
         continue;
       } else {
         status = 2;
@@ -200,7 +214,7 @@ int do_parse_params(char *argv[], actions_t *actions) {
             (strcmp(argv[i], "d") == 0) || (strcmp(argv[i], "p") == 0) ||
             (strcmp(argv[i], "f") == 0) || (strcmp(argv[i], "l") == 0) ||
             (strcmp(argv[i], "s") == 0)) {
-          actions->type = argv[i][0];
+          params->type = argv[i][0];
           continue;
         } else {
           status = 3;
@@ -212,6 +226,11 @@ int do_parse_params(char *argv[], actions_t *actions) {
       }
     }
 
+    if (i == 1) {
+      params->location = argv[i];
+      continue;
+    }
+
     status = 1; /* no match found */
     break;      /* do not increment the counter,
                    so that we can access the current state in error handling */
@@ -219,15 +238,19 @@ int do_parse_params(char *argv[], actions_t *actions) {
 
   /* error handling */
   if (status == 1) {
-    fprintf(stderr, "%s: unknown predicate: %s\n", program, argv[i]);
+    fprintf(stderr, "%s: unknown predicate: `%s'\n", program, argv[i]);
     return EXIT_FAILURE;
   }
   if (status == 2) {
-    fprintf(stderr, "%s: missing argument to %s\n", program, argv[i - 1]);
+    fprintf(stderr, "%s: missing argument to `%s'\n", program, argv[i - 1]);
     return EXIT_FAILURE;
   }
   if (status == 3) {
     fprintf(stderr, "%s: unknown argument to %s: %s\n", program, argv[i - 1], argv[i]);
+    return EXIT_FAILURE;
+  }
+  if (status == 4) {
+    fprintf(stderr, "%s: `%s' is not the name of a known user\n", program, argv[i]);
     return EXIT_FAILURE;
   }
 
@@ -238,13 +261,13 @@ int do_parse_params(char *argv[], actions_t *actions) {
  * @brief calls do_file on each directory entry recursively
  *
  * @param path the path to be processed
- * @param actions the parsed parameters
+ * @param params the parsed parameters
  * @param attr the entry attributes from lstat
  *
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
-int do_dir(char *path, actions_t actions, struct stat attr) {
+int do_dir(char *path, params_t params, struct stat attr) {
   DIR *dir;
   struct dirent *entry;
   size_t length;
@@ -286,11 +309,11 @@ int do_dir(char *path, actions_t actions, struct stat attr) {
 
     /* process the entry */
     if (lstat(full_path, &attr) == 0) {
-      do_file(full_path, actions, attr);
+      do_file(full_path, params, attr);
 
       /* if a directory, call the function recursively */
       if (S_ISDIR(attr.st_mode)) {
-        do_dir(full_path, actions, attr);
+        do_dir(full_path, params, attr);
       }
     } else {
       fprintf(stderr, "%s: lstat(%s): %s\n", program, full_path, strerror(errno));
@@ -310,39 +333,39 @@ int do_dir(char *path, actions_t actions, struct stat attr) {
 }
 
 /**
- * @brief calls subfunctions based on the actions struct
+ * @brief calls subfunctions based on the params struct
  *
  * @param path the path to be processed
- * @param actions the parsed parameters
+ * @param params the parsed parameters
  * @param attr the entry attributes from lstat
  *
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
-int do_file(char *path, actions_t actions, struct stat attr) {
+int do_file(char *path, params_t params, struct stat attr) {
 
   /* filtering */
-  if (actions.nouser && do_nouser(attr) != EXIT_SUCCESS) {
+  if (params.type && do_type(params.type, attr) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
-  if (actions.user && do_user(actions.user, attr) != EXIT_SUCCESS) {
+  if (params.nouser && do_nouser(attr) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
-  if (actions.name && do_name(path, actions.name) != EXIT_SUCCESS) {
+  if (params.user && do_user(params.userid, attr) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
-  if (actions.path && do_path(path, actions.path) != EXIT_SUCCESS) {
+  if (params.name && do_name(path, params.name) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
-  if (actions.type && do_type(actions.type, attr) != EXIT_SUCCESS) {
+  if (params.path && do_path(path, params.path) != EXIT_SUCCESS) {
     return EXIT_SUCCESS;
   }
 
   /* printing */
-  if ((!actions.ls || actions.print) && do_print(path) != EXIT_SUCCESS) {
+  if ((!params.ls || params.print) && do_print(path) != EXIT_SUCCESS) {
     return EXIT_FAILURE;
   }
-  if (actions.ls && do_ls(path, attr) != EXIT_SUCCESS) {
+  if (params.ls && do_ls(path, attr) != EXIT_SUCCESS) {
     return EXIT_FAILURE;
   }
 
@@ -455,11 +478,36 @@ int do_nouser(struct stat attr) {
  * @retval EXIT_SUCCESS
  * @retval EXIT_FAILURE
  */
-int do_user(char *user, struct stat attr) {
+int do_user(unsigned int userid, struct stat attr) {
 
-  if (strcmp(do_get_user(attr), user) == 0) {
+  if (userid == attr.st_uid) {
     return EXIT_SUCCESS;
   }
+
+  return EXIT_FAILURE;
+}
+
+/**
+ * @brief returns EXIT_SUCCESS if the filename matches the pattern
+ *
+ * @param path the entry path
+ * @param pattern the pattern to match against
+ *
+ * @retval EXIT_SUCCESS
+ * @retval EXIT_FAILURE
+ */
+int do_name(char *path, char *pattern) {
+  char *filename = basename(path);
+
+  if (fnmatch(pattern, filename, 0) == 0) {
+    return EXIT_SUCCESS;
+  }
+
+  /*
+   * we are not calling free() on the filename; from the basename manual:
+   * both dirname() and basename() return pointers to null-terminated strings,
+   * do not pass these pointers to free()
+   */
 
   return EXIT_FAILURE;
 }
@@ -475,32 +523,11 @@ int do_user(char *user, struct stat attr) {
  */
 int do_path(char *path, char *pattern) {
 
-  /* khalikov */
+  if (fnmatch(pattern, path, 0) == 0) {
+    return EXIT_SUCCESS;
+  }
 
-  return EXIT_SUCCESS;
-}
-
-/**
- * @brief returns EXIT_SUCCESS if the filename matches the pattern
- *
- * @param path the entry path
- * @param pattern the pattern to match against
- *
- * @retval EXIT_SUCCESS
- * @retval EXIT_FAILURE
- */
-int do_name(char *path, char *pattern) {
-  char *filename = basename(path);
-
-  /* khalikov */
-
-  /*
-   * we are not calling free() on the filename; from the basename manual:
-   * both dirname() and basename() return pointers to null-terminated strings,
-   * do not pass these pointers to free()
-   */
-
-  return EXIT_SUCCESS;
+  return EXIT_FAILURE;
 }
 
 /**

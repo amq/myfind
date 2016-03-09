@@ -39,6 +39,18 @@ script:
   - find . -user travis -type f -ls
   - ./myfind . -type f -ls -user travis
   - find . -type f -ls -user travis
+  - ./myfind . -user haha
+  - find . -user haha
+  - ./myfind . -user 1000
+  - find . -user 1000
+  - ./myfind . -name main
+  - find . -name main
+  - ./myfind . -name main*
+  - find . -name main*
+  - ./myfind . -path myfind.dir
+  - find . -path myfind.dir
+  - ./myfind . -path *myfind.dir*
+  - find . -path *myfind.dir*
   - if [ "$CC" == "gcc-5" ]; then gcov-5 CMakeFiles/*/*.o; fi
 after_success:
   - if [ "$CC" == "gcc-5" ]; then bash <(curl -s https://codecov.io/bash); fi
