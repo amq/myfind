@@ -21,7 +21,7 @@ addons:
       name: "amq/myfind"
       description: "Learning C: a GNU find clone"
     notification_email: "amq@users.noreply.github.com"
-    build_command_prepend: "mkdir -p build; cd build; cmake .."
+    build_command_prepend: "cmake ."
     build_command: "make"
     branch_pattern: coverity_scan
 script:
