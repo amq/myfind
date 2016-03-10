@@ -375,14 +375,14 @@ int do_dir(char *path, params_t *params, struct stat attr) {
 
     if (!full_path) {
       fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
-      return EXIT_FAILURE;
+      break; /* return would mean a resource leak on dir */
     }
 
     /* concat the path with the entry name */
     if (snprintf(full_path, length, "%s/%s", path, entry->d_name) < 0) {
-      free(full_path);
       fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
-      return EXIT_FAILURE;
+      free(full_path);
+      break;
     }
 
     /* process the entry */
@@ -396,7 +396,7 @@ int do_dir(char *path, params_t *params, struct stat attr) {
     } else {
       fprintf(stderr, "%s: lstat(%s): %s\n", program, full_path, strerror(errno));
       free(full_path);
-      return EXIT_FAILURE;
+      break;
     }
 
     free(full_path);
