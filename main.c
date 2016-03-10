@@ -303,7 +303,7 @@ int do_file(char *path, params_t *params, struct stat attr) {
 
   do {
     if (params->type && do_type(params->type, attr) != EXIT_SUCCESS) {
-      return EXIT_SUCCESS;
+      return EXIT_SUCCESS; /* the entry didn't pass the check, do not proceed */
     }
     if (params->nouser && do_nouser(attr) != EXIT_SUCCESS) {
       return EXIT_SUCCESS;

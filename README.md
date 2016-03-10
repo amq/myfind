@@ -1,4 +1,4 @@
-[![build](https://img.shields.io/travis/amq/myfind.svg)](https://travis-ci.org/amq/myfind) [![coverage](https://img.shields.io/codecov/c/github/amq/myfind.svg)](https://codecov.io/github/amq/myfind)
+[![build](https://img.shields.io/travis/amq/myfind.svg)](https://travis-ci.org/amq/myfind) [![coverage](https://img.shields.io/codecov/c/github/amq/myfind.svg)](https://codecov.io/github/amq/myfind) [![analysis](https://img.shields.io/coverity/scan/8222.svg)](https://scan.coverity.com/projects/amq-myfind)
 
 - the goal is to fully mimic GNU `find` (with a limited set of options)
 - performance is comparable to `find`
