@@ -66,6 +66,7 @@ char *program;
  */
 int main(int argc, char *argv[]) {
   struct stat attr;
+  params_t *params;
   char *location;
 
   program = argv[0];
@@ -75,7 +76,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "%s: setlocale() failed\n", program);
   }
 
-  params_t *params = calloc(1, sizeof(*params));
+  params = calloc(1, sizeof(*params));
 
   if (!params) {
     fprintf(stderr, "%s: calloc(): %s\n", program, strerror(errno));
