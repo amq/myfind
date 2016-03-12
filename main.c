@@ -30,6 +30,7 @@ typedef struct params_t {
 void do_help(void);
 int do_parse_params(int argc, char *argv[], params_t *params);
 
+int do_location(params_t *params);
 int do_file(char *path, params_t *params, struct stat attr);
 int do_dir(char *path, params_t *params, struct stat attr);
 
@@ -56,7 +57,7 @@ char *do_get_symlink(char *path, struct stat attr);
 static char *program;
 
 /**
- * @brief calls do_parse_params, do_file and do_dir
+ * @brief calls do_parse_params and do_location
  *
  * @param argc number of arguments
  * @param argv the arguments
@@ -64,9 +65,7 @@ static char *program;
  * @returns EXIT_SUCCESS, EXIT_FAILURE
  */
 int main(int argc, char *argv[]) {
-  struct stat attr;
   params_t *params;
-  char *location;
 
   program = argv[0];
 
@@ -91,39 +90,11 @@ int main(int argc, char *argv[]) {
     return EXIT_SUCCESS;
   }
 
-  location = params->location;
-
-  if (!location) {
-    location = ".";
-  }
-
-  /*
-   * try reading the attributes of the input
-   * to verify that it exists and to check if it is a directory
-   */
-  if (lstat(location, &attr) == 0) {
-    /* process the input */
-    do_file(location, params, attr);
-
-    /* if a directory, process its contents */
-    if (S_ISDIR(attr.st_mode)) {
-      do_dir(location, params, attr);
-    }
-  } else {
-    fprintf(stderr, "%s: lstat(%s): %s\n", program, location, strerror(errno));
-    while (params) {
-      params_t *next = params->next;
-      free(params);
-      params = next;
-    }
+  if (do_location(params) != EXIT_SUCCESS) {
     return EXIT_FAILURE;
   }
 
-  while (params) {
-    params_t *next = params->next;
-    free(params);
-    params = next;
-  }
+  /* params are freed by the program termination */
 
   return EXIT_SUCCESS;
 }
@@ -133,7 +104,8 @@ int main(int argc, char *argv[]) {
  */
 void do_help(void) {
 
-  if (printf("myfind <file or directory> [ <aktion> ]\n"
+  if (printf("usage:\n"
+             "myfind <file or directory> [ <aktion> ]\n"
              "-help               show this message\n"
              "-user <name>|<uid>  entries belonging to a user\n"
              "-name <pattern>     entry names matching a pattern\n"
@@ -165,8 +137,10 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
    * 2 = missing argument for predicate
    * 3 = unknown argument for predicate
    * 4 = unknown user
+   * 5 = path after expression
    */
   int status = 0;
+  int expression = 0;
 
   /* params can start from argv[1] */
   for (i = 1; i < argc; i++, params = params->next) {
@@ -182,18 +156,22 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
     /* parameters consisting of a single part */
     if (strcmp(argv[i], "-help") == 0) {
       params->help = 1;
+      expression = 1;
       continue;
     }
     if (strcmp(argv[i], "-print") == 0) {
       params->print = 1;
+      expression = 1;
       continue;
     }
     if (strcmp(argv[i], "-ls") == 0) {
       params->ls = 1;
+      expression = 1;
       continue;
     }
     if (strcmp(argv[i], "-nouser") == 0) {
       params->nouser = 1;
+      expression = 1;
       continue;
     }
 
@@ -204,10 +182,12 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
         /* check if the user exists */
         if ((pwd = getpwnam(params->user))) {
           params->userid = pwd->pw_uid;
+          expression = 1;
           continue;
         }
         /* otherwise, if the input is a number, use that */
         if (sscanf(params->user, "%u", &params->userid)) {
+          expression = 1;
           continue;
         }
         status = 4;
@@ -220,6 +200,7 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
     if (strcmp(argv[i], "-name") == 0) {
       if (argv[++i]) {
         params->name = argv[i];
+        expression = 1;
         continue;
       } else {
         status = 2;
@@ -229,6 +210,7 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
     if (strcmp(argv[i], "-path") == 0) {
       if (argv[++i]) {
         params->path = argv[i];
+        expression = 1;
         continue;
       } else {
         status = 2;
@@ -244,6 +226,7 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
             (strcmp(argv[i], "f") == 0) || (strcmp(argv[i], "l") == 0) ||
             (strcmp(argv[i], "s") == 0)) {
           params->type = argv[i][0];
+          expression = 1;
           continue;
         } else {
           status = 3;
@@ -255,15 +238,23 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
       }
     }
 
-    /* if the first parameter didn't match, consider it a path */
-    if (i == 1) {
-      params->location = argv[i];
-      continue;
+    /*
+     * there was no match;
+     * if the parameter starts with '-', return an error,
+     * else if there were no previous matches (expressions), consider it a path
+     */
+    if (argv[i][0] == '-') {
+      status = 1;
+      break;
+    } else {
+      if (!expression) {
+        params->location = argv[i];
+        continue;
+      } else {
+        status = 5;
+        break;
+      }
     }
-
-    status = 1; /* no match found */
-    break;      /* do not increment the counter,
-                   so that we can access the current state in error handling */
   }
 
   /* error handling */
@@ -283,6 +274,52 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
     fprintf(stderr, "%s: `%s' is not the name of a known user\n", program, argv[i]);
     return EXIT_FAILURE;
   }
+  if (status == 5) {
+    fprintf(stderr, "%s: paths must precede expression: %s\n", program, argv[i]);
+    do_help();
+    return EXIT_FAILURE;
+  }
+
+  return EXIT_SUCCESS;
+}
+
+/**
+ * @brief calls do_file and do_directory on locations from the params struct
+ *
+ * @param params the parsed parameters
+ *
+ * @returns EXIT_SUCCESS, EXIT_FAILURE
+ */
+int do_location(params_t *params) {
+  struct stat attr;
+  char *location;
+
+  do {
+    location = params->location;
+
+    if (!location) {
+      location = ".";
+    }
+
+    /*
+     * try reading the attributes of the location
+     * to verify that it exists and to check if it is a directory
+     */
+    if (lstat(location, &attr) == 0) {
+      /* process the input */
+      do_file(location, params, attr);
+
+      /* if a directory, process its contents */
+      if (S_ISDIR(attr.st_mode)) {
+        do_dir(location, params, attr);
+      }
+    } else {
+      fprintf(stderr, "%s: lstat(%s): %s\n", program, location, strerror(errno));
+      return EXIT_FAILURE;
+    }
+
+    params = params->next;
+  } while (params && params->location);
 
   return EXIT_SUCCESS;
 }
@@ -294,7 +331,7 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
  * @param params the parsed parameters
  * @param attr the entry attributes from lstat
  *
- * @returns EXIT_SUCCESS, EXIT_FAILURE
+ * @returns EXIT_SUCCESS
  */
 int do_file(char *path, params_t *params, struct stat attr) {
   int printed = 0;
@@ -345,6 +382,7 @@ int do_dir(char *path, params_t *params, struct stat attr) {
   DIR *dir;
   struct dirent *entry;
   size_t length;
+  char *slash = "";
   char *full_path;
 
   dir = opendir(path);
@@ -360,10 +398,10 @@ int do_dir(char *path, params_t *params, struct stat attr) {
       continue;
     }
 
-    /* avoid '//' in path if the input has a trailing slash */
+    /* add a trailing slash if not present */
     length = strlen(path);
-    if (path[length - 1] == '/') {
-      path[length - 1] = '\0';
+    if (path[length - 1] != '/') {
+      slash = "/";
     }
 
     /* allocate memory for the full entry path */
@@ -376,7 +414,7 @@ int do_dir(char *path, params_t *params, struct stat attr) {
     }
 
     /* concat the path with the entry name */
-    if (snprintf(full_path, length, "%s/%s", path, entry->d_name) < 0) {
+    if (snprintf(full_path, length, "%s%s%s", path, slash, entry->d_name) < 0) {
       fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
       free(full_path);
       break;
@@ -444,7 +482,7 @@ int do_ls(char *path, struct stat attr) {
   char *symlink = do_get_symlink(path, attr);
   char *arrow = symlink[0] ? " -> " : "";
 
-  if (printf("%6ld %4lld %10s %3ld %-8s %-8s %8lld %12s %s%s%s\n", inode, blocks, perms, links,
+  if (printf("%6lu %4lld %10s %3lu %-8s %-8s %8lld %12s %s%s%s\n", inode, blocks, perms, links,
              user, group, size, mtime, path, arrow, symlink) < 0) {
     fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
     free(symlink);
