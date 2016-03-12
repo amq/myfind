@@ -1,17 +1,17 @@
+#include <dirent.h>
+#include <errno.h>
+#include <fnmatch.h>
+#include <grp.h>
+#include <libgen.h>
+#include <limits.h>
+#include <locale.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <limits.h>
 #include <string.h>
-#include <dirent.h>
 #include <sys/stat.h>
-#include <errno.h>
-#include <locale.h>
 #include <time.h>
 #include <unistd.h>
-#include <libgen.h>
-#include <pwd.h>
-#include <grp.h>
-#include <fnmatch.h>
 
 typedef struct params_t {
   char *location;
@@ -53,16 +53,15 @@ char *do_get_symlink(char *path, struct stat attr);
  * used for error messages,
  * spares us one argument for each subfunction
  */
-char *program;
+static char *program;
 
 /**
- * @brief calls do_parse_params, then do_file and, if a directory, do_dir
+ * @brief calls do_parse_params, do_file and do_dir
  *
  * @param argc number of arguments
  * @param argv the arguments
  *
- * @retval EXIT_SUCCESS
- * @retval EXIT_FAILURE
+ * @returns EXIT_SUCCESS, EXIT_FAILURE
  */
 int main(int argc, char *argv[]) {
   struct stat attr;
@@ -112,6 +111,11 @@ int main(int argc, char *argv[]) {
     }
   } else {
     fprintf(stderr, "%s: lstat(%s): %s\n", program, location, strerror(errno));
+    while (params) {
+      params_t *next = params->next;
+      free(params);
+      params = next;
+    }
     return EXIT_FAILURE;
   }
 
@@ -126,10 +130,6 @@ int main(int argc, char *argv[]) {
 
 /**
  * @brief prints out the program usage
- *
- * @param void
- *
- * @retval void
  */
 void do_help(void) {
 
@@ -149,11 +149,11 @@ void do_help(void) {
 /**
  * @brief parses argv and populates the params struct
  *
- * @param params the arguments from argv
+ * @param argc the number of arguments from argv
+ * @param argv the arguments from argv
  * @param params the struct to populate
  *
- * @retval EXIT_SUCCESS
- * @retval EXIT_FAILURE
+ * @returns EXIT_SUCCESS, EXIT_FAILURE
  */
 int do_parse_params(int argc, char *argv[], params_t *params) {
   struct passwd *pwd;
@@ -210,9 +210,8 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
         if (sscanf(params->user, "%u", &params->userid)) {
           continue;
         }
-        /* the input is unusable */
         status = 4;
-        break;
+        break; /* the user is not found and not a number */
       } else {
         status = 2;
         break; /* the second part is missing */
@@ -295,15 +294,14 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
  * @param params the parsed parameters
  * @param attr the entry attributes from lstat
  *
- * @retval EXIT_SUCCESS
- * @retval EXIT_FAILURE
+ * @returns EXIT_SUCCESS, EXIT_FAILURE
  */
 int do_file(char *path, params_t *params, struct stat attr) {
   int printed = 0;
 
   do {
     if (params->type && do_type(params->type, attr) != EXIT_SUCCESS) {
-      return EXIT_SUCCESS;
+      return EXIT_SUCCESS; /* the entry didn't pass the check, do not proceed */
     }
     if (params->nouser && do_nouser(attr) != EXIT_SUCCESS) {
       return EXIT_SUCCESS;
@@ -341,8 +339,7 @@ int do_file(char *path, params_t *params, struct stat attr) {
  * @param params the parsed parameters
  * @param attr the entry attributes from lstat
  *
- * @retval EXIT_SUCCESS
- * @retval EXIT_FAILURE
+ * @returns EXIT_SUCCESS, EXIT_FAILURE
  */
 int do_dir(char *path, params_t *params, struct stat attr) {
   DIR *dir;
@@ -354,7 +351,7 @@ int do_dir(char *path, params_t *params, struct stat attr) {
 
   if (!dir) {
     fprintf(stderr, "%s: opendir(%s): %s\n", program, path, strerror(errno));
-    return EXIT_FAILURE; /* stops a function call, the program continues */
+    return EXIT_FAILURE;
   }
 
   while ((entry = readdir(dir))) {
@@ -375,14 +372,14 @@ int do_dir(char *path, params_t *params, struct stat attr) {
 
     if (!full_path) {
       fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
-      return EXIT_FAILURE;
+      break; /* a return would require a closedir() */
     }
 
     /* concat the path with the entry name */
     if (snprintf(full_path, length, "%s/%s", path, entry->d_name) < 0) {
-      free(full_path);
       fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
-      return EXIT_FAILURE;
+      free(full_path);
+      break;
     }
 
     /* process the entry */
@@ -396,7 +393,7 @@ int do_dir(char *path, params_t *params, struct stat attr) {
     } else {
       fprintf(stderr, "%s: lstat(%s): %s\n", program, full_path, strerror(errno));
       free(full_path);
-      return EXIT_FAILURE;
+      continue; /* a single entry has failed, let's try the next one */
     }
 
     free(full_path);
@@ -415,8 +412,7 @@ int do_dir(char *path, params_t *params, struct stat attr) {
  *
  * @param path the path to be processed
  *
- * @retval EXIT_SUCCESS
- * @retval EXIT_FAILURE
+ * @returns EXIT_SUCCESS, EXIT_FAILURE
  */
 int do_print(char *path) {
 
@@ -434,14 +430,13 @@ int do_print(char *path) {
  * @param path the path to be processed
  * @param attr the entry attributes from lstat
  *
- * @retval EXIT_SUCCESS
- * @retval EXIT_FAILURE
+ * @returns EXIT_SUCCESS, EXIT_FAILURE
  */
 int do_ls(char *path, struct stat attr) {
-  long inode = attr.st_ino;
+  unsigned long inode = attr.st_ino;
   long long blocks = S_ISLNK(attr.st_mode) ? 0 : attr.st_blocks / 2;
   char *perms = do_get_perms(attr);
-  long links = attr.st_nlink;
+  unsigned long links = attr.st_nlink;
   char *user = do_get_user(attr);
   char *group = do_get_group(attr);
   long long size = attr.st_size;
@@ -467,8 +462,7 @@ int do_ls(char *path, struct stat attr) {
  * @param type the type to match against
  * @param attr the entry attributes from lstat
  *
- * @retval EXIT_SUCCESS
- * @retval EXIT_FAILURE
+ * @returns EXIT_SUCCESS, EXIT_FAILURE
  */
 int do_type(char type, struct stat attr) {
 
@@ -485,8 +479,7 @@ int do_type(char type, struct stat attr) {
  *
  * @param attr the entry attributes from lstat
  *
- * @retval EXIT_SUCCESS
- * @retval EXIT_FAILURE
+ * @returns EXIT_SUCCESS, EXIT_FAILURE
  */
 int do_nouser(struct stat attr) {
   static unsigned int cache_uid = UINT_MAX;
@@ -509,11 +502,10 @@ int do_nouser(struct stat attr) {
 /**
  * @brief returns EXIT_SUCCESS if the userid matches the entry attribute
  *
- * @param user the username or uid to match against
+ * @param userid the uid to match against
  * @param attr the entry attributes from lstat
  *
- * @retval EXIT_SUCCESS
- * @retval EXIT_FAILURE
+ * @returns EXIT_SUCCESS, EXIT_FAILURE
  */
 int do_user(unsigned int userid, struct stat attr) {
 
@@ -530,8 +522,7 @@ int do_user(unsigned int userid, struct stat attr) {
  * @param path the entry path
  * @param pattern the pattern to match against
  *
- * @retval EXIT_SUCCESS
- * @retval EXIT_FAILURE
+ * @returns EXIT_SUCCESS, EXIT_FAILURE
  */
 int do_name(char *path, char *pattern) {
   char *filename = basename(path);
@@ -555,8 +546,7 @@ int do_name(char *path, char *pattern) {
  * @param path the entry path
  * @param pattern the pattern to match against
  *
- * @retval EXIT_SUCCESS
- * @retval EXIT_FAILURE
+ * @returns EXIT_SUCCESS, EXIT_FAILURE
  */
 int do_path(char *path, char *pattern) {
 
@@ -573,39 +563,39 @@ int do_path(char *path, char *pattern) {
  * @param attr the entry attributes from lstat
  *
  * @returns the entry type as a char
- * @retval b block special file
- * @retval c character special file
- * @retval d directory
- * @retval p fifo (named pipe)
- * @retval f regular file
- * @retval l symbolic link
- * @retval s socket
- * @retval ? some other file type
  */
 char do_get_type(struct stat attr) {
 
+  /* block special file */
   if (S_ISBLK(attr.st_mode)) {
     return 'b';
   }
+  /* character special file */
   if (S_ISCHR(attr.st_mode)) {
     return 'c';
   }
+  /* directory */
   if (S_ISDIR(attr.st_mode)) {
     return 'd';
   }
+  /* fifo (named pipe) */
   if (S_ISFIFO(attr.st_mode)) {
     return 'p';
   }
+  /* regular file */
   if (S_ISREG(attr.st_mode)) {
     return 'f';
   }
+  /* symbolic link */
   if (S_ISLNK(attr.st_mode)) {
     return 'l';
   }
+  /* socket */
   if (S_ISSOCK(attr.st_mode)) {
     return 's';
   }
 
+  /* some other file type */
   return '?';
 }
 
@@ -784,17 +774,20 @@ char *do_get_symlink(char *path, struct stat attr) {
 
     /*
      * if readlink() fills the buffer, double it and run again
-     * even if it equals, because we need a character for the termination
+     * even if it equals, because we need a character for the termination;
      * a check for > 0 is mandatory, because we are comparing signed and unsigned
      */
     while ((length = readlink(path, symlink, buffer)) > 0 && (size_t)length >= buffer) {
       buffer *= 2;
-      symlink = realloc(symlink, buffer);
+      char *new_symlink = realloc(symlink, buffer);
 
-      if (!symlink) {
+      if (!new_symlink) {
         fprintf(stderr, "%s: realloc(): %s\n", program, strerror(errno));
+        free(symlink); /* realloc doesn't free the old object if it fails */
         return strdup("");
       }
+
+      symlink = new_symlink;
     }
 
     if (length < 0) {
