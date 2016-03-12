@@ -9,9 +9,10 @@
 - relying exclusively on `EXIT_SUCCESS` and `EXIT_FAILURE`
 - errors are checked for every function, even `printf`
 - the output of `pwd` and `grp` is cached (this makes `-ls` 3x faster)
-- constant testing during development: performance, memory usage, static code analysis, Travis with `gcc` and `clang`
+- constant testing during development: performance, memory usage, Travis with `gcc` and `clang`
+- using static code analysis with `scan-build` and `coverity`
 - consistent code formatting (LLVM), automatically maintained by `clang-format`
-- full support of `gnu99` and `gnu11` standards
+- full support of the `gnu99` and `gnu11` standards
 
 Building
 ```
@@ -38,24 +39,49 @@ Usage
 
 Performance
 ```
-# tested 5 times and recorded the best result
+# tested 5 times and recorded the fastest time and the worst memory case
 
 time ./myfind / -ls > mylist.txt
-
-real	0m1.464s
-user	0m0.604s
-sys	    0m0.844s
-
+real	0m1.421s
+user	0m0.732s
+sys	    0m0.684s
 VIRT    RES    SHR
-21868   2512   2188
-
+21752   2808   2452
 
 time find / -ls > list.txt
-
-real	0m1.519s
+real	0m1.495s
 user	0m0.784s
-sys 	0m0.728s
-
+sys	    0m0.696s
 VIRT    RES    SHR
-25044   2972   2568
+25196   3380   2952
+
+
+time ./myfind / -user 1000 -ls > mylist.txt
+real	0m0.752s
+user	0m0.180s
+sys	    0m0.568s
+VIRT    RES    SHR
+21816   2824   2452
+
+time find / -user 1000 -ls > list.txt
+real	0m0.657s
+user	0m0.232s
+sys	    0m0.420s
+VIRT    RES    SHR
+25076   3364   2928
+
+
+time ./myfind / -name *sys* -ls > mylist.txt
+real	0m0.727s
+user	0m0.244s
+sys	    0m0.480s
+VIRT    RES    SHR
+21780   2904   2544
+
+time find / -name *sys* -ls > list.txt
+real	0m0.460s
+user	0m0.180s
+sys	    0m0.276s
+VIRT    RES    SHR
+25400   3604   3008
 ```
