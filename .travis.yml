@@ -18,3 +18,39 @@ script:
   - cd build
   - cmake -DCMAKE_BUILD_TYPE=Debug ..
   - make
+  # simple tests
+  - ln -s /etc/dest link
+  - ./myfind . -print
+  - find . -print
+  - ./myfind . -ls
+  - find . -ls
+  - ./myfind . -type d -ls
+  - find . -type d -ls
+  - ./myfind . -type d
+  - find . -type d
+  - ./myfind . -ls -type d
+  - find . -ls -type d
+  - ./myfind . -type l
+  - find . -type l
+  - ./myfind . -user travis
+  - find . -user travis
+  - ./myfind . -nouser
+  - find . -nouser
+  - ./myfind . -user travis -type f -ls
+  - find . -user travis -type f -ls
+  - ./myfind . -type f -ls -user travis
+  - find . -type f -ls -user travis
+  - ./myfind . -user 1000
+  - find . -user 1000
+  - ./myfind . -name main
+  - find . -name main
+  - ./myfind . -name main*
+  - find . -name main*
+  - ./myfind . -path myfind.dir
+  - find . -path myfind.dir
+  - ./myfind . -path *myfind.dir*
+  - find . -path *myfind.dir*
+  # coverage
+  - if [ "$CC" == "gcc-5" ]; then gcov-5 CMakeFiles/*/*.o; fi
+after_success:
+  - if [ "$CC" == "gcc-5" ]; then bash <(curl -s https://codecov.io/bash); fi
