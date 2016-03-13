@@ -20,40 +20,22 @@ script:
   - make
   # simple tests
   - ln -s /etc/dest link
-  - ./myfind . -print
-  - find . -print
-  - ./myfind . -ls
-  - find . -ls
-  - ./myfind . -type d -ls
-  - find . -type d -ls
-  - ./myfind . -type d
-  - find . -type d
-  - ./myfind . -ls -type d
-  - find . -ls -type d
-  - ./myfind . -type l
-  - find . -type l
-  - ./myfind . -user travis
-  - find . -user travis
-  - ./myfind . -nouser
-  - find . -nouser
-  - ./myfind . -user travis -type f -ls
-  - find . -user travis -type f -ls
-  - ./myfind . -type f -ls -user travis
-  - find . -type f -ls -user travis
-  - ./myfind . -user 1000
-  - find . -user 1000
-  - ./myfind . -name main
-  - find . -name main
-  - ./myfind . -name main*
-  - find . -name main*
-  - ./myfind . -path myfind.dir
-  - find . -path myfind.dir
-  - ./myfind . -path *myfind.dir*
-  - find . -path *myfind.dir*
-  - ./myfind
-  - find
-  - ./myfind CMakeFiles . -ls
-  - find CMakeFiles . -ls
+  - diff -s <(./myfind) <(find)
+  - diff -s <(./myfind -print) <(find -print)
+  - diff -s <(./myfind -ls) <(find -ls)
+  - diff -s <(./myfind -print -ls) <(find -print -ls)
+  - diff -s <(./myfind -type f) <(find -type f)
+  - diff -s <(./myfind -type d -ls) <(find -type d -ls)
+  - diff -s <(./myfind -type l -ls) <(find -type l -ls)
+  - diff -s <(./myfind -user travis) <(find -user travis)
+  - diff -s <(./myfind -user 1000) <(find -user 1000)
+  - diff -s <(./myfind -group 1000) <(find -group 1000)
+  - diff -s <(./myfind -name main*) <(find -name main*)
+  - diff -s <(./myfind -path myfind.dir) <(find -path myfind.dir)
+  - diff -s <(./myfind -path *myfind.dir*) <(find -path *myfind.dir*)
+  - diff -s <(./myfind CMakeFiles . -ls) <(find CMakeFiles . -ls)
+  - diff -s <(./myfind . /etc) <(find . /etc)
+  - diff -s <(./myfind . /etc -ls) <(find . /etc -ls)
   # coverage
   - if [ "$CC" == "gcc" ]; then gcov CMakeFiles/*/*.o; fi
 after_success:
