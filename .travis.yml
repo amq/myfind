@@ -10,7 +10,6 @@ addons:
       - ubuntu-toolchain-r-test # gcc
     packages:
       - gcc-5
-      - clang
   coverity_scan:
     project:
       name: "amq/myfind"
@@ -22,8 +21,8 @@ addons:
 script:
   - mkdir -p build
   - cd build
-  - scan-build cmake -DCMAKE_BUILD_TYPE=Debug ..
-  - scan-build make
+  - cmake -DCMAKE_BUILD_TYPE=Debug ..
+  - make
   # simple tests
   - ln -s /etc/dest link
   - sleep 2
