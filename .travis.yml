@@ -8,13 +8,9 @@ addons:
   apt:
     sources:
       - ubuntu-toolchain-r-test # gcc
-      - llvm-toolchain-precise-3.7 # clang
-      - george-edison55-precise-backports # cmake
     packages:
       - gcc-5
-      - clang-3.7
-      - cmake
-      - cmake-data
+      - clang
   coverity_scan:
     project:
       name: "amq/myfind"
