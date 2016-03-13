@@ -20,6 +20,7 @@ script:
   - make
   # simple tests
   - ln -s /etc/dest link
+  - sleep 2
   - diff -s <(./myfind) <(find)
   - diff -s <(./myfind -print) <(find -print)
   - diff -s <(./myfind -ls) <(find -ls)
