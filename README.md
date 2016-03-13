@@ -26,7 +26,7 @@ make
 
 Usage
 ```
-./myfind <file or directory> [ <aktion> ]
+./myfind [ <file or directory> ] [ <aktion> ]
 -help               show this message
 -print              print entries with paths
 -ls                 print entry details

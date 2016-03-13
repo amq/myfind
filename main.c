@@ -13,6 +13,10 @@
 #include <time.h>
 #include <unistd.h>
 
+/**
+ * a linked list containing the parsed parameters
+ * from argv by do_parse_params
+ */
 typedef struct params_t {
   char *location;
   int help;
@@ -54,7 +58,7 @@ char *do_get_symlink(char *path, struct stat attr);
  * used for error messages,
  * spares us one argument for each subfunction
  */
-static char *program;
+char *program;
 
 /**
  * @brief calls do_parse_params and do_location
@@ -105,7 +109,7 @@ int main(int argc, char *argv[]) {
 void do_help(void) {
 
   if (printf("usage:\n"
-             "myfind <file or directory> [ <aktion> ]\n"
+             "myfind [ <file or directory> ] [ <aktion> ]\n"
              "-help               show this message\n"
              "-user <name>|<uid>  entries belonging to a user\n"
              "-name <pattern>     entry names matching a pattern\n"
@@ -247,7 +251,7 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
       status = 1;
       break;
     } else {
-      if (!expression) {
+      if (expression == 0) {
         params->location = argv[i];
         continue;
       } else {
@@ -307,11 +311,15 @@ int do_location(params_t *params) {
      */
     if (lstat(location, &attr) == 0) {
       /* process the input */
-      do_file(location, params, attr);
+      if (do_file(location, params, attr) != EXIT_SUCCESS) {
+        return EXIT_FAILURE;
+      }
 
       /* if a directory, process its contents */
       if (S_ISDIR(attr.st_mode)) {
-        do_dir(location, params, attr);
+        if (do_dir(location, params, attr) != EXIT_SUCCESS) {
+          return EXIT_FAILURE;
+        }
       }
     } else {
       fprintf(stderr, "%s: lstat(%s): %s\n", program, location, strerror(errno));
@@ -325,45 +333,62 @@ int do_location(params_t *params) {
 }
 
 /**
- * @brief calls subfunctions based on the params struct
+ * @brief checks the entry using subfunctions based on params, if passed, prints it
  *
  * @param path the path to be processed
  * @param params the parsed parameters
  * @param attr the entry attributes from lstat
  *
- * @returns EXIT_SUCCESS
+ * @returns EXIT_SUCCESS, EXIT_FAILURE
  */
 int do_file(char *path, params_t *params, struct stat attr) {
   int printed = 0;
 
   do {
-    if (params->type && do_type(params->type, attr) != EXIT_SUCCESS) {
-      return EXIT_SUCCESS; /* the entry didn't pass the check, do not proceed */
+    if (params->type) {
+      if (do_type(params->type, attr) != EXIT_SUCCESS) {
+        return EXIT_SUCCESS; /* the entry didn't pass the check, do not proceed */
+      }
     }
-    if (params->nouser && do_nouser(attr) != EXIT_SUCCESS) {
-      return EXIT_SUCCESS;
+    if (params->nouser) {
+      if (do_nouser(attr) != EXIT_SUCCESS) {
+        return EXIT_SUCCESS;
+      }
     }
-    if (params->user && do_user(params->userid, attr) != EXIT_SUCCESS) {
-      return EXIT_SUCCESS;
+    if (params->user) {
+      if (do_user(params->userid, attr) != EXIT_SUCCESS) {
+        return EXIT_SUCCESS;
+      }
     }
-    if (params->name && do_name(path, params->name) != EXIT_SUCCESS) {
-      return EXIT_SUCCESS;
+    if (params->name) {
+      if (do_name(path, params->name) != EXIT_SUCCESS) {
+        return EXIT_SUCCESS;
+      }
     }
-    if (params->path && do_path(path, params->path) != EXIT_SUCCESS) {
-      return EXIT_SUCCESS;
+    if (params->path) {
+      if (do_path(path, params->path) != EXIT_SUCCESS) {
+        return EXIT_SUCCESS;
+      }
     }
     if (params->print) {
-      do_print(path);
+      if (do_print(path) != EXIT_SUCCESS) {
+        return EXIT_FAILURE;
+      }
       printed = 1;
     }
     if (params->ls) {
-      do_ls(path, attr);
+      if (do_ls(path, attr) != EXIT_SUCCESS) {
+        return EXIT_FAILURE;
+      }
       printed = 1;
     }
-  } while ((params = params->next));
+    params = params->next;
+  } while (params);
 
   if (printed == 0) {
-    do_print(path);
+    if (do_print(path) != EXIT_SUCCESS) {
+      return EXIT_FAILURE;
+    }
   }
 
   return EXIT_SUCCESS;
@@ -495,7 +520,7 @@ int do_ls(char *path, struct stat attr) {
 }
 
 /**
- * @brief returns EXIT_SUCCESS if the type matches the entry attribute
+ * @brief checks if the type matches the entry attributes
  *
  * @param type the type to match against
  * @param attr the entry attributes from lstat
@@ -513,7 +538,7 @@ int do_type(char type, struct stat attr) {
 }
 
 /**
- * @brief returns EXIT_SUCCESS if the entry doesn't have a user
+ * @brief checks if the entry doesn't have a user
  *
  * @param attr the entry attributes from lstat
  *
@@ -538,7 +563,7 @@ int do_nouser(struct stat attr) {
 }
 
 /**
- * @brief returns EXIT_SUCCESS if the userid matches the entry attribute
+ * @brief checks if the userid matches the entry attribute
  *
  * @param userid the uid to match against
  * @param attr the entry attributes from lstat
@@ -555,7 +580,7 @@ int do_user(unsigned int userid, struct stat attr) {
 }
 
 /**
- * @brief returns EXIT_SUCCESS if the filename matches the pattern
+ * @brief checks if the filename matches the pattern
  *
  * @param path the entry path
  * @param pattern the pattern to match against
@@ -564,22 +589,19 @@ int do_user(unsigned int userid, struct stat attr) {
  */
 int do_name(char *path, char *pattern) {
   char *filename = basename(path);
+  int flags = 0;
 
-  if (fnmatch(pattern, filename, 0) == 0) {
+  if (fnmatch(pattern, filename, flags) == 0) {
     return EXIT_SUCCESS;
   }
 
-  /*
-   * we are not calling free() on the filename; from the basename manual:
-   * both dirname() and basename() return pointers to null-terminated strings,
-   * do not pass these pointers to free()
-   */
+  /* basename manual: do not pass the returned pointer to free() */
 
   return EXIT_FAILURE;
 }
 
 /**
- * @brief returns EXIT_SUCCESS if the path matches the pattern
+ * @brief checks if the path matches the pattern
  *
  * @param path the entry path
  * @param pattern the pattern to match against
@@ -587,8 +609,9 @@ int do_name(char *path, char *pattern) {
  * @returns EXIT_SUCCESS, EXIT_FAILURE
  */
 int do_path(char *path, char *pattern) {
+  int flags = 0;
 
-  if (fnmatch(pattern, path, 0) == 0) {
+  if (fnmatch(pattern, path, flags) == 0) {
     return EXIT_SUCCESS;
   }
 
@@ -596,7 +619,7 @@ int do_path(char *path, char *pattern) {
 }
 
 /**
- * @brief returns the entry type
+ * @brief converts the entry attributes to a readable type
  *
  * @param attr the entry attributes from lstat
  *
@@ -638,7 +661,7 @@ char do_get_type(struct stat attr) {
 }
 
 /**
- * @brief returns the entry permissions
+ * @brief converts the entry attributes to readable permissions
  *
  * @param attr the entry attributes from lstat
  *
@@ -671,7 +694,7 @@ char *do_get_perms(struct stat attr) {
 }
 
 /**
- * @brief returns the entry user or uid, if user not present on the system
+ * @brief converts the entry attributes to username or, if not found, uid
  *
  * @param attr the entry attributes from lstat
  *
@@ -707,11 +730,13 @@ char *do_get_user(struct stat attr) {
   cache_uid = pwd->pw_uid;
   cache_pw_name = pwd->pw_name;
 
+  /* getpwuid manual: do not pass the returned pointer to free() */
+
   return pwd->pw_name;
 }
 
 /**
- * @brief returns the entry group or gid, if group not present on the system
+ * @brief converts the entry attributes to groupname or, if not found, gid
  *
  * @param attr the entry attributes from lstat
  *
@@ -747,11 +772,13 @@ char *do_get_group(struct stat attr) {
   cache_gid = grp->gr_gid;
   cache_gr_name = grp->gr_name;
 
+  /* getgrgid manual: do not pass the returned pointer to free() */
+
   return grp->gr_name;
 }
 
 /**
- * @brief returns the entry modification time
+ * @brief converts the entry attributes to a readable modification time
  *
  * @param attr the entry attributes from lstat
  *
@@ -787,7 +814,7 @@ char *do_get_mtime(struct stat attr) {
 }
 
 /**
- * @brief returns the entry symlink, if entry of type s
+ * @brief extracts the entry symlink
  *
  * @param path the entry path
  * @param attr the entry attributes from lstat
