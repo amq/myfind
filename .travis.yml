@@ -52,8 +52,8 @@ script:
   - find . -path *myfind.dir*
   - ./myfind
   - find
-  - ./myfind /etc . -ls
-  - find /etc . -ls
+  - ./myfind CMakeFiles . -ls
+  - find CMakeFiles . -ls
   # coverage
   - if [ "$CC" == "gcc" ]; then gcov CMakeFiles/*/*.o; fi
 after_success:
