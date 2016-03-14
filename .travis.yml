@@ -30,8 +30,8 @@ script:
   - make
   # simple tests
   - ln -s /etc/dest link
-  - sleep 2
   - ./myfind . -ls
+  - sleep 4 # wait for gcda
   - diff -s <(./myfind) <(find)
   - diff -s <(./myfind -print) <(find -print)
   - diff -s <(./myfind -ls) <(find -ls)
