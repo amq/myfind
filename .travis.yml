@@ -1,23 +1,28 @@
 env:
   global:
-   - secure: "RzQk/MPhK2G2kA7FwnnvNsno+wpfbrtTp4aLhzCuCSVfoix4DAhMdnbcp1RDKtpj+9YZXrm3urjaf349Zq5KBop666eAgq0fId0sxmIczNebhE32VHa6CvSur55Sro1ycbeUM8y1fof1OpzZ3tlQR9BW1pxAsZiMH/D1SM/L7mMcJIH++5MP2hntAE8RzD6UXv1Ww8uc3JUQJK00KffrpZjvSDR+7qnwjl2Tz4cclBZZIhg9s9tgcSBRCh52B+g24AM2oZNkFEjQMHh0HJ6eeZ25TrEL5RuzF8jR49ZQh8rnOfPxdA27S4XFiICRfXkDHYQCNDxIYZtMJmk8P6164I85p7eIbdU8CzJeSO+BeVQeKfuJU9hDHdGCBz9ufuzw3IMM9i03uN0YUiCjcv6tYJVqewMuEX8WAayiwAGHw8/vuhnVl1jlHWqOEFBz411FjeyNUrpecHUakMTVA1rzp/6YLNsaFR45LtyKLS8OX2R04bMNyZUBxUrIqAySYW3t2CvU3TTVtV2GfGJZIoS/w9EYVVlPOFxpaB3CARbtEk8/qNqpbegordy1aB7Hkh0F4L+P2iDJJ/sO2A8bYo5nmKq4W6AxKUYbhW00GeOnrpQe75ymy1UPuKueZzzT2YHXhPc7jifqwo1Q3gGzrkIOIGorW+4tAqQgpVxmKRdA1G4="
+    - secure: "RzQk/MPhK2G2kA7FwnnvNsno+wpfbrtTp4aLhzCuCSVfoix4DAhMdnbcp1RDKtpj+9YZXrm3urjaf349Zq5KBop666eAgq0fId0sxmIczNebhE32VHa6CvSur55Sro1ycbeUM8y1fof1OpzZ3tlQR9BW1pxAsZiMH/D1SM/L7mMcJIH++5MP2hntAE8RzD6UXv1Ww8uc3JUQJK00KffrpZjvSDR+7qnwjl2Tz4cclBZZIhg9s9tgcSBRCh52B+g24AM2oZNkFEjQMHh0HJ6eeZ25TrEL5RuzF8jR49ZQh8rnOfPxdA27S4XFiICRfXkDHYQCNDxIYZtMJmk8P6164I85p7eIbdU8CzJeSO+BeVQeKfuJU9hDHdGCBz9ufuzw3IMM9i03uN0YUiCjcv6tYJVqewMuEX8WAayiwAGHw8/vuhnVl1jlHWqOEFBz411FjeyNUrpecHUakMTVA1rzp/6YLNsaFR45LtyKLS8OX2R04bMNyZUBxUrIqAySYW3t2CvU3TTVtV2GfGJZIoS/w9EYVVlPOFxpaB3CARbtEk8/qNqpbegordy1aB7Hkh0F4L+P2iDJJ/sO2A8bYo5nmKq4W6AxKUYbhW00GeOnrpQe75ymy1UPuKueZzzT2YHXhPc7jifqwo1Q3gGzrkIOIGorW+4tAqQgpVxmKRdA1G4="
+    - COVERITY_SCAN_PROJECT_NAME="amq/myfind"
+    - COVERITY_SCAN_NOTIFICATION_EMAIL="amq@users.noreply.github.com"
+    - COVERITY_SCAN_BUILD_COMMAND_PREPEND="mkdir -p build; cd build; cmake .."
+    - COVERITY_SCAN_BUILD_COMMAND="cmake --build ."
+    - COVERITY_SCAN_BRANCH_PATTERN="coverity_scan"
+
 language: c
 compiler:
   - gcc-5
+  - clang-3.7
 addons:
   apt:
     sources:
       - ubuntu-toolchain-r-test # gcc
+      - llvm-toolchain-precise-3.7 # clang
+      - george-edison55-precise-backports # cmake
     packages:
       - gcc-5
-  coverity_scan:
-    project:
-      name: "amq/myfind"
-      description: "Learning C: a GNU find clone"
-    notification_email: "amq@users.noreply.github.com"
-    build_command_prepend: "mkdir -p build; cd build; cmake .."
-    build_command: "cmake --build ."
-    branch_pattern: coverity_scan
+      - clang-3.7
+      - cmake
+      - cmake-data
+
 script:
   - mkdir -p build
   - cd build
@@ -41,8 +46,12 @@ script:
   - diff -s <(./myfind -path *myfind.dir*) <(find -path *myfind.dir*)
   - diff -s <(./myfind CMakeFiles . -ls) <(find CMakeFiles . -ls)
   - diff -s <(./myfind . /etc) <(find . /etc)
-  - diff -s <(./myfind . /etc -ls) <(find . /etc -ls) || true # find is escaping symlinks
+  - diff -s <(./myfind . /etc -ls) <(find . /etc -ls) || true # find is escaping unusual characters
   # coverage
   - if [ "$CC" == "gcc-5" ]; then gcov-5 CMakeFiles/*/*.o; fi
 after_success:
   - if [ "$CC" == "gcc-5" ]; then bash <(curl -s https://codecov.io/bash); fi
+  # coverity
+  - if ([ "$CC" == "gcc-5" ] && [ "$TRAVIS_BRANCH" == "coverity_scan" ]); then
+      curl -s "https://scan.coverity.com/scripts/travisci_build_coverity_scan.sh" | bash || true;
+    fi
