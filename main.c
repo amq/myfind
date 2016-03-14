@@ -15,7 +15,7 @@
 
 /**
  * a linked list containing the parsed parameters
- * from argv by do_parse_params
+ * out of argv by do_parse_params
  */
 typedef struct params_t {
   char *location;
@@ -109,7 +109,7 @@ int main(int argc, char *argv[]) {
 void do_help(void) {
 
   if (printf("usage:\n"
-             "myfind [ <file or directory> ] [ <aktion> ]\n"
+             "myfind [ <location> ] [ <aktion> ]\n"
              "-help               show this message\n"
              "-user <name>|<uid>  entries belonging to a user\n"
              "-name <pattern>     entry names matching a pattern\n"
@@ -133,7 +133,7 @@ void do_help(void) {
  */
 int do_parse_params(int argc, char *argv[], params_t *params) {
   struct passwd *pwd;
-  int i;
+  int i; /* used outside of the loop */
 
   /*
    * 0 = ok or nothing to check
@@ -245,7 +245,7 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
     /*
      * there was no match;
      * if the parameter starts with '-', return an error,
-     * else if there were no previous matches (expressions), consider it a path
+     * else if there were no previous matches (expressions), save it as a location
      */
     if (argv[i][0] == '-') {
       status = 1;
@@ -310,20 +310,24 @@ int do_location(params_t *params) {
      * to verify that it exists and to check if it is a directory
      */
     if (lstat(location, &attr) == 0) {
-      /* process the input */
+      /*
+       * the returns are needed here
+       * to forward the status of the location processing to main()
+       * for example, ./myfind /nope -ls should return 1
+       */
       if (do_file(location, params, attr) != EXIT_SUCCESS) {
-        return EXIT_FAILURE;
+        return EXIT_FAILURE; /* typically: printf failed */
       }
 
       /* if a directory, process its contents */
       if (S_ISDIR(attr.st_mode)) {
         if (do_dir(location, params, attr) != EXIT_SUCCESS) {
-          return EXIT_FAILURE;
+          return EXIT_FAILURE; /* typically: permission denied */
         }
       }
     } else {
       fprintf(stderr, "%s: lstat(%s): %s\n", program, location, strerror(errno));
-      return EXIT_FAILURE;
+      return EXIT_FAILURE; /* typically: no such file or directory */
     }
 
     params = params->next;
@@ -345,9 +349,10 @@ int do_file(char *path, params_t *params, struct stat attr) {
   int printed = 0;
 
   do {
+    /* filtering */
     if (params->type) {
       if (do_type(params->type, attr) != EXIT_SUCCESS) {
-        return EXIT_SUCCESS; /* the entry didn't pass the check, do not proceed */
+        return EXIT_SUCCESS; /* the entry didn't pass the check, do not print it */
       }
     }
     if (params->nouser) {
@@ -370,9 +375,10 @@ int do_file(char *path, params_t *params, struct stat attr) {
         return EXIT_SUCCESS;
       }
     }
+    /* printing */
     if (params->print) {
       if (do_print(path) != EXIT_SUCCESS) {
-        return EXIT_FAILURE;
+        return EXIT_FAILURE; /* a fatal error occurred */
       }
       printed = 1;
     }
@@ -447,6 +453,10 @@ int do_dir(char *path, params_t *params, struct stat attr) {
 
     /* process the entry */
     if (lstat(full_path, &attr) == 0) {
+      /*
+       * there are no returns for do_file and do_dir on purpose here;
+       * it is normal for a single entry to fail, then we try the next one
+       */
       do_file(full_path, params, attr);
 
       /* if a directory, call the function recursively */
@@ -456,7 +466,7 @@ int do_dir(char *path, params_t *params, struct stat attr) {
     } else {
       fprintf(stderr, "%s: lstat(%s): %s\n", program, full_path, strerror(errno));
       free(full_path);
-      continue; /* a single entry has failed, let's try the next one */
+      continue;
     }
 
     free(full_path);
