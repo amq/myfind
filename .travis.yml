@@ -31,21 +31,20 @@ script:
   # simple tests
   - ln -s /etc/dest link
   - ./myfind . -ls
-  - sleep 4 # wait for gcda
-  - diff -s <(./myfind) <(find)
-  - diff -s <(./myfind -print) <(find -print)
-  - diff -s <(./myfind -ls) <(find -ls)
-  - diff -s <(./myfind -print -ls) <(find -print -ls)
-  - diff -s <(./myfind -type f) <(find -type f)
-  - diff -s <(./myfind -type d -ls) <(find -type d -ls)
-  - diff -s <(./myfind -type l -ls) <(find -type l -ls)
-  - diff -s <(./myfind -user travis) <(find -user travis)
-  - diff -s <(./myfind -user 1000) <(find -user 1000)
-  - diff -s <(./myfind -name main*) <(find -name main*)
-  - diff -s <(./myfind -path myfind.dir) <(find -path myfind.dir)
-  - diff -s <(./myfind -path *myfind.dir*) <(find -path *myfind.dir*)
-  - diff -s <(./myfind CMakeFiles . -ls) <(find CMakeFiles . -ls)
-  - diff -s <(./myfind . /etc) <(find . /etc)
+  - diff -s <(./myfind) <(find) || true
+  - diff -s <(./myfind -print) <(find -print) || true
+  - diff -s <(./myfind -ls) <(find -ls) || true
+  - diff -s <(./myfind -print -ls) <(find -print -ls) || true
+  - diff -s <(./myfind -type f) <(find -type f) || true
+  - diff -s <(./myfind -type d -ls) <(find -type d -ls) || true
+  - diff -s <(./myfind -type l -ls) <(find -type l -ls) || true
+  - diff -s <(./myfind -user travis) <(find -user travis) || true
+  - diff -s <(./myfind -user 1000) <(find -user 1000) || true
+  - diff -s <(./myfind -name main*) <(find -name main*) || true
+  - diff -s <(./myfind -path myfind.dir) <(find -path myfind.dir) || true
+  - diff -s <(./myfind -path *myfind.dir*) <(find -path *myfind.dir*) || true
+  - diff -s <(./myfind CMakeFiles . -ls) <(find CMakeFiles . -ls) || true
+  - diff -s <(./myfind . /etc) <(find . /etc) || true
   - diff -s <(./myfind . /etc -ls) <(find . /etc -ls) || true # find is escaping unusual characters
   # coverage
   - if [ "$CC" == "gcc-5" ]; then gcov-5 CMakeFiles/*/*.o; fi
