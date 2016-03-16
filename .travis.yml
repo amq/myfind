@@ -9,6 +9,7 @@ env:
 
 language: c
 compiler:
+  - gcc
   - gcc-5
   - clang-3.7
 addons:
@@ -54,6 +55,6 @@ after_success:
   - cd $TRAVIS_BUILD_DIR
   - rm -rf build
   # coverity
-  - if ([ "$CC" == "gcc-5" ] && [ "$TRAVIS_BRANCH" == "coverity_scan" ]); then
+  - if ([ "$CC" == "gcc" ] && [ "$TRAVIS_BRANCH" == "coverity_scan" ]); then
       curl -s "https://scan.coverity.com/scripts/travisci_build_coverity_scan.sh" | bash || true;
     fi
