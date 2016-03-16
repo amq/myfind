@@ -15,7 +15,6 @@
 
 /**
  * a linked list containing the parsed parameters
- * out of argv by do_parse_params
  */
 typedef struct params_t {
   char *location;
@@ -33,6 +32,7 @@ typedef struct params_t {
 
 void do_help(void);
 int do_parse_params(int argc, char *argv[], params_t *params);
+int do_free_params(params_t *params);
 
 int do_location(params_t *params);
 int do_file(char *path, params_t *params, struct stat attr);
@@ -55,13 +55,12 @@ char *do_get_symlink(char *path, struct stat attr);
 
 /**
  * a global variable containing the program name
- * used for error messages,
- * spares us one argument for each subfunction
+ * used for error messages
  */
-char *program;
+char *program_name;
 
 /**
- * @brief calls do_parse_params and do_location
+ * @brief entry point; calls do_parse_params and do_location
  *
  * @param argc number of arguments
  * @param argv the arguments
@@ -71,34 +70,37 @@ char *program;
 int main(int argc, char *argv[]) {
   params_t *params;
 
-  program = argv[0];
+  program_name = argv[0];
 
   /* honor the system locale */
   if (!setlocale(LC_ALL, "")) {
-    fprintf(stderr, "%s: setlocale() failed\n", program);
+    fprintf(stderr, "%s: setlocale() failed\n", program_name);
   }
 
   params = calloc(1, sizeof(*params));
 
   if (!params) {
-    fprintf(stderr, "%s: calloc(): %s\n", program, strerror(errno));
+    fprintf(stderr, "%s: calloc(): %s\n", program_name, strerror(errno));
     return EXIT_FAILURE;
   }
 
   if (do_parse_params(argc, argv, params) != EXIT_SUCCESS) {
+    do_free_params(params);
     return EXIT_FAILURE;
   }
 
   if (params->help) {
     do_help();
+    do_free_params(params);
     return EXIT_SUCCESS;
   }
 
   if (do_location(params) != EXIT_SUCCESS) {
+    do_free_params(params);
     return EXIT_FAILURE;
   }
 
-  /* params are freed by the program termination */
+  do_free_params(params);
 
   return EXIT_SUCCESS;
 }
@@ -118,7 +120,7 @@ void do_help(void) {
              "-ls                 print entry details\n"
              "-nouser             entries not belonging to a user\n"
              "-path               entry paths (incl. names) matching a pattern\n") < 0) {
-    fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
+    fprintf(stderr, "%s: printf(): %s\n", program_name, strerror(errno));
   }
 }
 
@@ -153,7 +155,7 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
     params->next = calloc(1, sizeof(*params));
 
     if (!params->next) {
-      fprintf(stderr, "%s: calloc(): %s\n", program, strerror(errno));
+      fprintf(stderr, "%s: calloc(): %s\n", program_name, strerror(errno));
       return EXIT_FAILURE;
     }
 
@@ -263,25 +265,43 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
 
   /* error handling */
   if (status == 1) {
-    fprintf(stderr, "%s: unknown predicate: `%s'\n", program, argv[i]);
+    fprintf(stderr, "%s: unknown predicate: `%s'\n", program_name, argv[i]);
     return EXIT_FAILURE;
   }
   if (status == 2) {
-    fprintf(stderr, "%s: missing argument to `%s'\n", program, argv[i - 1]);
+    fprintf(stderr, "%s: missing argument to `%s'\n", program_name, argv[i - 1]);
     return EXIT_FAILURE;
   }
   if (status == 3) {
-    fprintf(stderr, "%s: unknown argument to %s: %s\n", program, argv[i - 1], argv[i]);
+    fprintf(stderr, "%s: unknown argument to %s: %s\n", program_name, argv[i - 1], argv[i]);
     return EXIT_FAILURE;
   }
   if (status == 4) {
-    fprintf(stderr, "%s: `%s' is not the name of a known user\n", program, argv[i]);
+    fprintf(stderr, "%s: `%s' is not the name of a known user\n", program_name, argv[i]);
     return EXIT_FAILURE;
   }
   if (status == 5) {
-    fprintf(stderr, "%s: paths must precede expression: %s\n", program, argv[i]);
+    fprintf(stderr, "%s: paths must precede expression: %s\n", program_name, argv[i]);
     do_help();
     return EXIT_FAILURE;
+  }
+
+  return EXIT_SUCCESS;
+}
+
+/**
+ * @brief frees the params linked list
+ *
+ * @param params the parsed parameters
+ *
+ * @returns EXIT_SUCCESS
+ */
+int do_free_params(params_t *params) {
+
+  while (params) {
+    params_t *next = params->next;
+    free(params);
+    params = next;
   }
 
   return EXIT_SUCCESS;
@@ -310,28 +330,24 @@ int do_location(params_t *params) {
      * to verify that it exists and to check if it is a directory
      */
     if (lstat(location, &attr) == 0) {
-      /*
-       * the returns are needed here
-       * to forward the status of the location processing to main()
-       * for example, ./myfind /nope -ls should return 1
-       */
-      if (do_file(location, params, attr) != EXIT_SUCCESS) {
-        return EXIT_FAILURE; /* typically: printf failed */
-      }
+      do_file(location, params, attr);
 
       /* if a directory, process its contents */
       if (S_ISDIR(attr.st_mode)) {
-        if (do_dir(location, params, attr) != EXIT_SUCCESS) {
-          return EXIT_FAILURE; /* typically: permission denied */
-        }
+        do_dir(location, params, attr);
       }
     } else {
-      fprintf(stderr, "%s: lstat(%s): %s\n", program, location, strerror(errno));
-      return EXIT_FAILURE; /* typically: no such file or directory */
+      fprintf(stderr, "%s: lstat(%s): %s\n", program_name, location, strerror(errno));
+      return EXIT_FAILURE;
     }
 
     params = params->next;
   } while (params && params->location);
+
+  /* GNU find returns 1 even if a single entry failed */
+  if (errno != 0) {
+    return EXIT_FAILURE;
+  }
 
   return EXIT_SUCCESS;
 }
@@ -388,6 +404,7 @@ int do_file(char *path, params_t *params, struct stat attr) {
       }
       printed = 1;
     }
+
     params = params->next;
   } while (params);
 
@@ -419,7 +436,7 @@ int do_dir(char *path, params_t *params, struct stat attr) {
   dir = opendir(path);
 
   if (!dir) {
-    fprintf(stderr, "%s: opendir(%s): %s\n", program, path, strerror(errno));
+    fprintf(stderr, "%s: opendir(%s): %s\n", program_name, path, strerror(errno));
     return EXIT_FAILURE;
   }
 
@@ -440,13 +457,13 @@ int do_dir(char *path, params_t *params, struct stat attr) {
     full_path = malloc(sizeof(char) * length);
 
     if (!full_path) {
-      fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
+      fprintf(stderr, "%s: malloc(): %s\n", program_name, strerror(errno));
       break; /* a return would require a closedir() */
     }
 
     /* concat the path with the entry name */
     if (snprintf(full_path, length, "%s%s%s", path, slash, entry->d_name) < 0) {
-      fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
+      fprintf(stderr, "%s: snprintf(): %s\n", program_name, strerror(errno));
       free(full_path);
       break;
     }
@@ -464,7 +481,7 @@ int do_dir(char *path, params_t *params, struct stat attr) {
         do_dir(full_path, params, attr);
       }
     } else {
-      fprintf(stderr, "%s: lstat(%s): %s\n", program, full_path, strerror(errno));
+      fprintf(stderr, "%s: lstat(%s): %s\n", program_name, full_path, strerror(errno));
       free(full_path);
       continue;
     }
@@ -473,7 +490,7 @@ int do_dir(char *path, params_t *params, struct stat attr) {
   }
 
   if (closedir(dir) != 0) {
-    fprintf(stderr, "%s: closedir(%s): %s\n", program, path, strerror(errno));
+    fprintf(stderr, "%s: closedir(%s): %s\n", program_name, path, strerror(errno));
     return EXIT_FAILURE;
   }
 
@@ -490,7 +507,7 @@ int do_dir(char *path, params_t *params, struct stat attr) {
 int do_print(char *path) {
 
   if (printf("%s\n", path) < 0) {
-    fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
+    fprintf(stderr, "%s: printf(): %s\n", program_name, strerror(errno));
     return EXIT_FAILURE;
   }
 
@@ -519,7 +536,7 @@ int do_ls(char *path, struct stat attr) {
 
   if (printf("%6lu %4lld %10s %3lu %-8s %-8s %8lld %12s %s%s%s\n", inode, blocks, perms, links,
              user, group, size, mtime, path, arrow, symlink) < 0) {
-    fprintf(stderr, "%s: printf(): %s\n", program, strerror(errno));
+    fprintf(stderr, "%s: printf(): %s\n", program_name, strerror(errno));
     free(symlink);
     return EXIT_FAILURE;
   }
@@ -731,7 +748,7 @@ char *do_get_user(struct stat attr) {
      */
     static char user[11];
     if (snprintf(user, 11, "%u", attr.st_uid) < 0) {
-      fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
+      fprintf(stderr, "%s: snprintf(): %s\n", program_name, strerror(errno));
       return "";
     }
     return user;
@@ -773,7 +790,7 @@ char *do_get_group(struct stat attr) {
      */
     static char group[11];
     if (snprintf(group, 11, "%u", attr.st_gid) < 0) {
-      fprintf(stderr, "%s: snprintf(): %s\n", program, strerror(errno));
+      fprintf(stderr, "%s: snprintf(): %s\n", program_name, strerror(errno));
       return "";
     }
     return group;
@@ -803,7 +820,7 @@ char *do_get_mtime(struct stat attr) {
   struct tm *local_mtime = localtime(&attr.st_mtime);
 
   if (!local_mtime) {
-    fprintf(stderr, "%s: localtime(): %s\n", program, strerror(errno));
+    fprintf(stderr, "%s: localtime(): %s\n", program_name, strerror(errno));
     return "";
   }
 
@@ -814,7 +831,7 @@ char *do_get_mtime(struct stat attr) {
   }
 
   if (strftime(mtime, sizeof(mtime), format, local_mtime) == 0) {
-    fprintf(stderr, "%s: strftime(): %s\n", program, strerror(errno));
+    fprintf(stderr, "%s: strftime(): %s\n", program_name, strerror(errno));
     return "";
   }
 
@@ -843,7 +860,7 @@ char *do_get_symlink(char *path, struct stat attr) {
     char *symlink = malloc(sizeof(char) * buffer);
 
     if (!symlink) {
-      fprintf(stderr, "%s: malloc(): %s\n", program, strerror(errno));
+      fprintf(stderr, "%s: malloc(): %s\n", program_name, strerror(errno));
       return strdup("");
     }
 
@@ -857,7 +874,7 @@ char *do_get_symlink(char *path, struct stat attr) {
       char *new_symlink = realloc(symlink, buffer);
 
       if (!new_symlink) {
-        fprintf(stderr, "%s: realloc(): %s\n", program, strerror(errno));
+        fprintf(stderr, "%s: realloc(): %s\n", program_name, strerror(errno));
         free(symlink); /* realloc doesn't free the old object if it fails */
         return strdup("");
       }
@@ -866,7 +883,7 @@ char *do_get_symlink(char *path, struct stat attr) {
     }
 
     if (length < 0) {
-      fprintf(stderr, "%s: readlink(%s): %s\n", program, path, strerror(errno));
+      fprintf(stderr, "%s: readlink(%s): %s\n", program_name, path, strerror(errno));
       free(symlink);
       return strdup("");
     }
