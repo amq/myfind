@@ -27,7 +27,7 @@ script:
   - mkdir -p build
   - cd build
   - cmake -DCMAKE_BUILD_TYPE=Debug ..
-  - make
+  - cmake --build .
   # simple tests
   - ln -s /etc/dest link
   - ./myfind . -ls
@@ -50,6 +50,9 @@ script:
   - if [ "$CC" == "gcc-5" ]; then gcov-5 CMakeFiles/*/*.o; fi
 after_success:
   - if [ "$CC" == "gcc-5" ]; then bash <(curl -s https://codecov.io/bash); fi
+  # cleanup
+  - cd $TRAVIS_BUILD_DIR
+  - rm -rf build
   # coverity
   - if ([ "$CC" == "gcc-5" ] && [ "$TRAVIS_BRANCH" == "coverity_scan" ]); then
       curl -s "https://scan.coverity.com/scripts/travisci_build_coverity_scan.sh" | bash || true;
