@@ -16,7 +16,7 @@
 /**
  * a linked list containing the parsed parameters
  */
-typedef struct params_t {
+typedef struct params_s {
   char *location;
   int help;
   int print;
@@ -27,7 +27,7 @@ typedef struct params_t {
   unsigned int userid;
   char *path;
   char *name;
-  struct params_t *next;
+  struct params_s *next;
 } params_t;
 
 void do_help(void);
@@ -871,7 +871,7 @@ char *do_get_symlink(char *path, struct stat attr) {
      */
     while ((length = readlink(path, symlink, buffer)) > 0 && (size_t)length >= buffer) {
       buffer *= 2;
-      char *new_symlink = realloc(symlink, buffer);
+      char *new_symlink = realloc(symlink, sizeof(char) * buffer);
 
       if (!new_symlink) {
         fprintf(stderr, "%s: realloc(): %s\n", program_name, strerror(errno));
