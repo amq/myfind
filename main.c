@@ -282,7 +282,7 @@ int do_parse_params(int argc, char *argv[], params_t *params) {
   }
   if (status == 5) {
     fprintf(stderr, "%s: paths must precede expression: %s\n", program_name, argv[i]);
-    do_help();
+    fprintf(stderr, "Usage: %s [ <location> ] [ <aktion> ]\n", program_name);
     return EXIT_FAILURE;
   }
 
