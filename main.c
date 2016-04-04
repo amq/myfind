@@ -57,7 +57,7 @@ char *do_get_symlink(char *path, struct stat attr);
  * a global variable containing the program name
  * used for error messages
  */
-char *program_name;
+char *program_name = "";
 
 /**
  * @brief entry point; calls do_parse_params and do_location
@@ -531,17 +531,18 @@ int do_ls(char *path, struct stat attr) {
   char *group = do_get_group(attr);
   long long size = attr.st_size;
   char *mtime = do_get_mtime(attr);
-  char *symlink = do_get_symlink(path, attr);
-  char *arrow = symlink[0] ? " -> " : "";
+  char *s = do_get_symlink(path, attr);
+  char *arrow = s ? " -> " : "";
+  char *symlink = s ? s : "";
 
   if (printf("%6lu %4lld %10s %3lu %-8s %-8s %8lld %12s %s%s%s\n", inode, blocks, perms, links,
              user, group, size, mtime, path, arrow, symlink) < 0) {
     fprintf(stderr, "%s: printf(): %s\n", program_name, strerror(errno));
-    free(symlink);
+    free(s);
     return EXIT_FAILURE;
   }
 
-  free(symlink);
+  free(s);
 
   return EXIT_SUCCESS;
 }
@@ -738,6 +739,9 @@ char *do_get_user(struct stat attr) {
     return cache_pw_name;
   }
 
+  /* reset the cache */
+  cache_uid = UINT_MAX;
+
   pwd = getpwuid(attr.st_uid);
 
   if (!pwd) {
@@ -779,6 +783,9 @@ char *do_get_group(struct stat attr) {
   if (cache_gid == attr.st_gid) {
     return cache_gr_name;
   }
+
+  /* reset the cache */
+  cache_gid = UINT_MAX;
 
   grp = getgrgid(attr.st_gid);
 
@@ -861,7 +868,7 @@ char *do_get_symlink(char *path, struct stat attr) {
 
     if (!symlink) {
       fprintf(stderr, "%s: malloc(): %s\n", program_name, strerror(errno));
-      return strdup("");
+      return NULL;
     }
 
     /*
@@ -876,7 +883,7 @@ char *do_get_symlink(char *path, struct stat attr) {
       if (!new_symlink) {
         fprintf(stderr, "%s: realloc(): %s\n", program_name, strerror(errno));
         free(symlink); /* realloc doesn't free the old object if it fails */
-        return strdup("");
+        return NULL;
       }
 
       symlink = new_symlink;
@@ -885,16 +892,13 @@ char *do_get_symlink(char *path, struct stat attr) {
     if (length < 0) {
       fprintf(stderr, "%s: readlink(%s): %s\n", program_name, path, strerror(errno));
       free(symlink);
-      return strdup("");
+      return NULL;
     }
 
     symlink[length] = '\0';
     return symlink;
   }
 
-  /*
-   * the entry is not a symlink
-   * strdup is needed to keep the output free-able
-   */
-  return strdup("");
+  /* the entry is not a symlink */
+  return NULL;
 }
