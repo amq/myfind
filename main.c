@@ -446,14 +446,15 @@ int do_dir(char *path, params_t *params, struct stat attr) {
       continue;
     }
 
-    /* add a trailing slash if not present */
     length = strlen(path);
+    
+    /* add a trailing slash if not present */
     if (path[length - 1] != '/') {
       slash = "/";
     }
 
     /* allocate memory for the full entry path */
-    length = strlen(path) + strlen(entry->d_name) + 2;
+    length += strlen(entry->d_name) + 2;
     full_path = malloc(sizeof(char) * length);
 
     if (!full_path) {
@@ -579,6 +580,9 @@ int do_nouser(struct stat attr) {
   if (cache_uid == attr.st_uid) {
     return EXIT_FAILURE;
   }
+
+  /* reset the cache */
+  cache_uid = UINT_MAX;
 
   if (!getpwuid(attr.st_uid)) {
     return EXIT_SUCCESS;
